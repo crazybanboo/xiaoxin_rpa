@@ -1,0 +1,4 @@
+.cursor
+.env
+*.pyc
+*.log

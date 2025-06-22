@@ -1,0 +1,21 @@
+general:
+  default_timeout: 10
+  retry_count: 3
+  retry_delay: 1.0
+  screenshot_dir: logs/screenshots
+  template_dir: templates
+image:
+  confidence: 0.8
+  grayscale: true
+  region: null
+keyboard:
+  key_delay: 0.1
+  type_interval: 0.05
+logging:
+  backup_count: 5
+  level: INFO
+  max_file_size: 10MB
+mouse:
+  click_delay: 0.1
+  double_click_interval: 0.1
+  move_duration: 0.5
