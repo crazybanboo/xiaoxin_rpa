@@ -12,10 +12,11 @@ from .locator import ImageLocator
 class WaitController:
     """等待控制器类"""
     
-    def __init__(self):
+    def __init__(self, image_locator=None):
         self.logger = RpaLogger.get_logger(__name__)
         self.logger.info("等待控制器初始化完成")
-        self.image_locator = ImageLocator()
+        # 如果传入了定位器实例，使用传入的；否则创建新的
+        self.image_locator = image_locator if image_locator is not None else ImageLocator()
     
     def wait_for_element(self, locator_func: Callable, timeout: float = 10.0, 
                         check_interval: float = 0.5, *args, **kwargs) -> bool:

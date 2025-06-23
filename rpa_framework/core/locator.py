@@ -43,15 +43,24 @@ class Locator:
         self.last_screenshot_time = 0
         self.screenshot_cache_duration = 1.0  # 截图缓存时间（秒）
         
-        # 初始化OCR
-        if OCR_AVAILABLE:
-            try:
-                self.ocr_reader = easyocr.Reader(['ch_sim', 'en'], gpu=False)
-            except Exception as e:
-                logger.warning(f"OCR初始化失败: {e}")
-                self.ocr_reader = None
-        else:
-            self.ocr_reader = None
+        # OCR延迟初始化
+        self._ocr_reader = None
+        self._ocr_initialized = False
+    
+    @property
+    def ocr_reader(self):
+        """延迟初始化OCR读取器"""
+        if not self._ocr_initialized:
+            self._ocr_initialized = True
+            if OCR_AVAILABLE:
+                try:
+                    self._ocr_reader = easyocr.Reader(['ch_sim', 'en'], gpu=False)
+                except Exception as e:
+                    logger.warning(f"OCR初始化失败: {e}")
+                    self._ocr_reader = None
+            else:
+                self._ocr_reader = None
+        return self._ocr_reader
     
     def get_screenshot(self, region: Optional[Tuple[int, int, int, int]] = None, 
                       use_cache: bool = True):

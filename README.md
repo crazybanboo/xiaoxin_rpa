@@ -175,6 +175,23 @@ keyboard.copy()
 keyboard.paste()
 keyboard.select_all()
 keyboard.clear_text()
+
+# IME输入法控制（Windows专用）
+# 确保英文输入环境
+original_status = keyboard.ensure_english_input()
+try:
+    keyboard.type_text("English text input")
+finally:
+    # 恢复原始输入法状态
+    keyboard.restore_ime_status(original_status)
+
+# 手动控制输入法状态
+keyboard.set_ime_status(False)  # 关闭输入法
+keyboard.set_ime_status(True)   # 开启输入法
+
+# 获取当前输入法状态
+status = keyboard.get_ime_status()
+print(f"输入法状态: {'开启' if status else '关闭'}")
 ```
 
 ### 4. 等待验证模块 (waiter.py)
@@ -210,6 +227,25 @@ confidence = config.get('image_confidence', 0.8)
 config.set('custom_setting', 'value')
 config.save()
 ```
+
+### IME输入法控制配置
+
+在`config/settings.yaml`中配置IME控制行为：
+
+```yaml
+keyboard:
+  ime_control:
+    enabled: true          # 启用IME控制功能
+    fallback_enabled: true # 启用降级方案（快捷键）
+    debug_mode: false      # 调试模式
+    auto_restore: true     # 自动恢复输入法状态
+```
+
+**配置说明**：
+- `enabled`: 控制是否启用IME控制功能
+- `fallback_enabled`: 当IMM32 API不可用时是否使用快捷键降级方案
+- `debug_mode`: 启用后会输出详细的调试信息
+- `auto_restore`: 自动恢复输入法状态到操作前的状态
 
 ## 🚀 扩展开发
 

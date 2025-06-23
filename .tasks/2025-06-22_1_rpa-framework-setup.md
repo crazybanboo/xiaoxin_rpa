@@ -154,4 +154,4 @@ rpa_framework/
 7. 实现rpa_framework/core/keyboard.py - 键盘操作功能
 8. 实现rpa_framework/core/waiter.py - 等待和验证功能
 9. 创建rpa_framework/main.py - 主程序和使用示例
-10. 创建README.md - 项目说明文档 
+10. 创建README.md - 项目说明文档

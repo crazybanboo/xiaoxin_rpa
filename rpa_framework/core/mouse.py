@@ -277,30 +277,37 @@ class MouseController:
             self.logger.error(f"检查鼠标位置失败: {e}")
             return False
 
-# 创建全局鼠标控制器实例
-mouse = MouseController()
+# 全局鼠标控制器实例（延迟创建）
+_global_mouse = None
+
+def _get_global_mouse():
+    """获取全局鼠标控制器实例（延迟创建）"""
+    global _global_mouse
+    if _global_mouse is None:
+        _global_mouse = MouseController()
+    return _global_mouse
 
 # 便捷函数
 def move_to(x: int, y: int, duration: float = 0.5) -> bool:
     """移动鼠标到指定位置"""
-    return mouse.move_to(x, y, duration)
+    return _get_global_mouse().move_to(x, y, duration)
 
 def click(x: Optional[int] = None, y: Optional[int] = None, button: str = 'left') -> bool:
     """鼠标点击"""
-    return mouse.click(x, y, button=button)
+    return _get_global_mouse().click(x, y, button=button)
 
 def double_click(x: Optional[int] = None, y: Optional[int] = None) -> bool:
     """双击"""
-    return mouse.double_click(x, y)
+    return _get_global_mouse().double_click(x, y)
 
 def right_click(x: Optional[int] = None, y: Optional[int] = None) -> bool:
     """右键点击"""
-    return mouse.right_click(x, y)
+    return _get_global_mouse().right_click(x, y)
 
 def drag_to(start_x: int, start_y: int, end_x: int, end_y: int, duration: float = 1.0) -> bool:
     """拖拽操作"""
-    return mouse.drag_to(start_x, start_y, end_x, end_y, duration)
+    return _get_global_mouse().drag_to(start_x, start_y, end_x, end_y, duration)
 
 def scroll(clicks: int, x: Optional[int] = None, y: Optional[int] = None) -> bool:
     """滚轮操作"""
-    return mouse.scroll(clicks, x, y) 
+    return _get_global_mouse().scroll(clicks, x, y) 
