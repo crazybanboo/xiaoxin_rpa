@@ -15,7 +15,7 @@ sys.path.insert(0, str(project_root))
 from core.utils import RpaLogger, RpaException, ConfigManager, ScreenCapture
 from core.locator import CoordinateLocator, ImageLocator, WindowLocator, locator
 from core.mouse import MouseController
-from core.keyboard import KeyboardController
+from core.keyboard import KeyboardController, LanguageType
 from core.waiter import WaitController
 
 class RpaFramework:
@@ -69,9 +69,9 @@ class RpaFramework:
             self.keyboard.press_key('enter')  # 按回车
             self.waiter.sleep(2)  # 等待记事本打开
             
-            # 在记事本中输入文本（使用IME控制确保英文输入）
-            print("正在确保英文输入环境...")
-            original_ime_status = self.keyboard.ensure_english_input()
+            # 在记事本中输入文本（切换到英文输入）
+            print("正在切换到英文输入环境...")
+            english_switch_success = self.keyboard.change_language(LanguageType.EN)
             
             try:
                 demo_text = "这是RPA框架的演示文本\\n包含多行内容\\n测试完成！"
@@ -87,11 +87,11 @@ class RpaFramework:
                 self.waiter.sleep(1)
                 
             finally:
-                # 恢复原始输入法状态
-                if original_ime_status is not None:
-                    print("正在恢复输入法状态...")
-                    self.keyboard.restore_ime_status(original_ime_status)
-                    print("输入法状态已恢复")
+                # 恢复中文输入法（如果之前切换成功）
+                if english_switch_success:
+                    print("正在恢复中文输入法...")
+                    self.keyboard.change_language(LanguageType.ZH)
+                    print("输入法已恢复为中文")
             
             # 3. 组合操作演示
             print("3. 组合操作演示")
@@ -227,75 +227,31 @@ class RpaFramework:
         try:
             self.logger.info("开始演示IME输入法控制功能")
             print("6. IME输入法控制演示")
-            
-            # 检查IME API可用性
-            if not self.keyboard._ime_api_available:
-                print("IME API不可用，跳过测试")
-                return
-            
-            # 获取当前输入法状态
-            print("正在获取当前输入法状态...")
-            current_status = self.keyboard.get_ime_status()
-            if current_status is not None:
-                print(f"当前输入法状态: {'开启' if current_status else '关闭'}")
-            else:
-                print("无法获取输入法状态")
-                return
-            
+
             # 打开记事本进行测试
-            print("打开记事本进行IME控制测试...")
+            print("打开记事本进行输入法控制测试...")
             self.keyboard.hotkey('win', 'r')
-            self.waiter.sleep(1)
+            self.waiter.sleep(0.5)
             self.keyboard.type_text('notepad')
+            self.waiter.sleep(0.5)
+            self.keyboard.press_key('enter')
             self.waiter.sleep(0.5)
             self.keyboard.press_key('enter')
             self.waiter.sleep(2)
             
-            # 测试临时关闭输入法
-            print("\\n测试临时关闭输入法...")
-            original_status = self.keyboard.disable_ime_temporarily()
-            if original_status is not None:
-                print(f"已临时关闭输入法，原始状态: {'开启' if original_status else '关闭'}")
-                
-                # 验证状态已改变
-                current_status = self.keyboard.get_ime_status()
-                print(f"当前输入法状态: {'开启' if current_status else '关闭'}")
+            # 测试切换到英文输入法
+            print("测试切换到英文输入法...")
+            if self.keyboard.change_language(LanguageType.EN):
+                print("成功切换到英文输入法")
                 
                 # 输入英文文本
                 test_text = "IME Control Test - English Input"
                 print(f"输入测试文本: {test_text}")
                 self.keyboard.type_text(test_text)
                 self.waiter.sleep(1)
-                
-                # 恢复输入法状态
-                print("\\n恢复输入法状态...")
-                if self.keyboard.restore_ime_status(original_status):
-                    print("输入法状态已恢复")
-                    # 验证状态已恢复
-                    current_status = self.keyboard.get_ime_status()
-                    print(f"恢复后输入法状态: {'开启' if current_status else '关闭'}")
-                else:
-                    print("恢复输入法状态失败")
             else:
-                print("临时关闭输入法失败")
-            
-            # 测试ensure_english_input方法
-            print("\\n测试ensure_english_input方法...")
-            self.keyboard.press_key('enter')
-            original_status = self.keyboard.ensure_english_input()
-            if original_status is not None:
-                try:
-                    test_text = "\\nEnsure English Input Test - Success"
-                    print(f"输入测试文本: {test_text}")
-                    self.keyboard.type_text(test_text)
-                    self.waiter.sleep(1)
-                finally:
-                    # 恢复状态
-                    self.keyboard.restore_ime_status(original_status)
-                    print("输入法状态已恢复")
-            
-            print("\\nIME控制演示完成！")
-            
+                print("切换到英文输入法失败")
+            print("IME控制演示完成！")
         except Exception as e:
             self.logger.error(f"IME控制演示出现错误: {e}")
             print(f"IME控制演示失败: {e}")
