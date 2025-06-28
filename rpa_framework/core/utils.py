@@ -10,6 +10,7 @@ import json
 import yaml
 import logging
 import traceback
+import inspect
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
@@ -57,9 +58,9 @@ class RpaLogger:
         
         # 控制台处理器（彩色输出）
         console_handler = colorlog.StreamHandler()
-        console_handler.setLevel(logging.INFO)
+        console_handler.setLevel(logging.DEBUG)
         console_format = colorlog.ColoredFormatter(
-            '%(log_color)s%(asctime)s [%(levelname)s] %(message)s',
+            '%(log_color)s%(asctime)s [%(levelname)s] %(caller_file)s:%(caller_line)d - %(message)s',
             datefmt='%H:%M:%S',
             log_colors={
                 'DEBUG': 'cyan',
@@ -76,32 +77,53 @@ class RpaLogger:
         file_handler = logging.FileHandler(log_file, encoding='utf-8')
         file_handler.setLevel(logging.DEBUG)
         file_format = logging.Formatter(
-            '%(asctime)s [%(levelname)s] %(funcName)s:%(lineno)d - %(message)s'
+            '%(asctime)s [%(levelname)s] %(caller_file)s:%(caller_line)d - %(message)s'
         )
         file_handler.setFormatter(file_format)
         
         self.logger.addHandler(console_handler)
         self.logger.addHandler(file_handler)
     
+    def _get_caller_info(self):
+        """获取真实调用者的文件名和行号"""
+        # 获取调用栈，跳过当前方法和日志包装方法
+        frame = inspect.currentframe()
+        try:
+            # 跳过: _get_caller_info -> debug/info/warning/error/critical -> 真实调用者
+            if frame and frame.f_back and frame.f_back.f_back:
+                caller_frame = frame.f_back.f_back
+                filename = os.path.basename(caller_frame.f_code.co_filename)
+                lineno = caller_frame.f_lineno
+                return filename, lineno
+            else:
+                return "unknown", 0
+        finally:
+            del frame
+    
     def debug(self, message: str):
         """调试日志"""
-        self.logger.debug(message)
+        filename, lineno = self._get_caller_info()
+        self.logger.debug(message, extra={'caller_file': filename, 'caller_line': lineno})
     
     def info(self, message: str):
         """信息日志"""
-        self.logger.info(message)
+        filename, lineno = self._get_caller_info()
+        self.logger.info(message, extra={'caller_file': filename, 'caller_line': lineno})
     
     def warning(self, message: str):
         """警告日志"""
-        self.logger.warning(message)
+        filename, lineno = self._get_caller_info()
+        self.logger.warning(message, extra={'caller_file': filename, 'caller_line': lineno})
     
     def error(self, message: str):
         """错误日志"""
-        self.logger.error(message)
+        filename, lineno = self._get_caller_info()
+        self.logger.error(message, extra={'caller_file': filename, 'caller_line': lineno})
     
     def critical(self, message: str):
         """严重错误日志"""
-        self.logger.critical(message)
+        filename, lineno = self._get_caller_info()
+        self.logger.critical(message, extra={'caller_file': filename, 'caller_line': lineno})
 
 
 class ConfigManager:
