@@ -65,7 +65,8 @@ class RpaFramework:
             
             self.keyboard.type_text('notepad')  # 输入notepad
             self.waiter.sleep(0.5)
-            
+            self.keyboard.press_key('enter')  # 按回车
+            self.waiter.sleep(0.5)
             self.keyboard.press_key('enter')  # 按回车
             self.waiter.sleep(2)  # 等待记事本打开
             
@@ -123,7 +124,7 @@ class RpaFramework:
         """演示图像识别功能"""
         try:
             self.logger.info("开始演示图像识别功能")
-            print("4. 图像识别演示")
+            print("3. 图像识别演示")
             
             # 截取当前屏幕作为参考
             screenshot_path = "current_screen.png"
