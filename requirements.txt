@@ -13,3 +13,4 @@ pytest
 pytest-cov
 easyocr
 requests
+pyyaml
