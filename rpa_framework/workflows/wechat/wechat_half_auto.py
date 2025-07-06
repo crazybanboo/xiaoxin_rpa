@@ -372,6 +372,89 @@ class WechatHalfAuto:
         """
         return self.operation_interface.take_operation_screenshot(filename)
     
+    def adjust_wechat_window(self) -> OperationResult:
+        """
+        调整企业微信窗口大小和位置
+        
+        Returns:
+            OperationResult: 操作结果
+        """
+        if not self.is_initialized:
+            return OperationResult(
+                success=False,
+                message="系统未初始化",
+                error_code="NOT_INITIALIZED"
+            )
+        
+        if not self.current_window_info:
+            return OperationResult(
+                success=False,
+                message="无法获取窗口信息",
+                error_code="NO_WINDOW_INFO"
+            )
+        
+        try:
+            # 从配置中获取窗口设置
+            wechat_config = self.config.get('wechat', {})
+            window_size = wechat_config.get('window_size', {})
+            window_position = wechat_config.get('window_position', {})
+            
+            target_width = window_size.get('width', 1200)
+            target_height = window_size.get('height', 800)
+            target_x = window_position.get('x', 100)
+            target_y = window_position.get('y', 100)
+            
+            hwnd = self.current_window_info['hwnd']
+            
+            # 激活窗口
+            if not self.locator.window_locator.activate_window(hwnd):
+                self.logger.warning("无法激活企业微信窗口")
+            
+            # 设置窗口大小和位置
+            success = self.locator.window_locator.set_window_size_and_position(
+                hwnd, target_x, target_y, target_width, target_height
+            )
+            
+            if success:
+                # 更新窗口信息
+                time.sleep(0.5)  # 等待窗口调整完成
+                new_window_info = self.locator.window_locator.get_window_info(hwnd)
+                if new_window_info:
+                    self.current_window_info = {
+                        'hwnd': new_window_info.hwnd,
+                        'title': new_window_info.title,
+                        'rect': new_window_info.rect,
+                        'width': new_window_info.width,
+                        'height': new_window_info.height,
+                        'center': new_window_info.center,
+                        'is_visible': new_window_info.is_visible
+                    }
+                
+                return OperationResult(
+                    success=True,
+                    message=f"窗口调整成功: {target_width}x{target_height} at ({target_x}, {target_y})",
+                    data={
+                        'width': target_width,
+                        'height': target_height,
+                        'x': target_x,
+                        'y': target_y
+                    }
+                )
+            else:
+                return OperationResult(
+                    success=False,
+                    message="窗口调整失败",
+                    error_code="WINDOW_ADJUST_FAILED"
+                )
+                
+        except Exception as e:
+            self.logger.error(f"调整窗口失败: {str(e)}")
+            return OperationResult(
+                success=False,
+                message=f"调整窗口失败: {str(e)}",
+                error_code="WINDOW_ADJUST_ERROR"
+            )
+    
     def cleanup(self):
         """清理资源"""
         self.logger.info("正在清理企业微信半自动化系统资源...")
@@ -451,8 +534,46 @@ def main1():
         window_info = wechat_auto.get_wechat_window_info()
         if window_info:
             wechat_auto.logger.info(f"📱 企业微信窗口: {window_info['title']}")
-            wechat_auto.logger.info(f"📏 窗口大小: {window_info['width']}x{window_info['height']}")
-            wechat_auto.logger.info(f"📏 窗口rect: {window_info['rect']}")
+            wechat_auto.logger.info(f"📏 当前窗口大小: {window_info['width']}x{window_info['height']}")
+            wechat_auto.logger.info(f"📏 当前窗口位置: {window_info['rect']}")
+        
+        # 调整窗口大小和位置
+        wechat_auto.logger.info("🔧 正在调整企业微信窗口大小和位置...")
+        adjust_result = wechat_auto.adjust_wechat_window()
+        
+        if adjust_result.success:
+            wechat_auto.logger.info(f"✅ {adjust_result.message}")
+            
+            # 获取调整后的窗口信息
+            updated_window_info = wechat_auto.get_wechat_window_info()
+            if updated_window_info:
+                wechat_auto.logger.info(f"📏 调整后窗口大小: {updated_window_info['width']}x{updated_window_info['height']}")
+                wechat_auto.logger.info(f"📏 调整后窗口位置: {updated_window_info['rect']}")
+        else:
+            wechat_auto.logger.error(f"❌ 窗口调整失败: {adjust_result.message}")
+            # 继续执行，不中断流程
+        
+        # 等待用户确认
+        print("\n" + "=" * 60)
+        print("🎯 窗口调整完成！")
+        print("📋 接下来将执行半自动群发点击功能：")
+        print("   1. 查找并点击前9个群发按钮")
+        print("   2. 进行滚轮下滑操作")
+        print("   3. 再选择3个未选框并执行特殊点击序列")
+        print("   4. 进行疯狂连点操作")
+        print("\n⚠️  请确保企业微信已准备就绪，并且群发页面已打开")
+        print("=" * 60)
+        
+        # 等待用户确认
+        user_input = input("\n🔍 请确认是否继续执行群发操作? (输入 'y' 或 'yes' 继续，其他任意键取消): ").strip().lower()
+        
+        if user_input not in ['y', 'yes', '是', '确认']:
+            wechat_auto.logger.info("❌ 用户取消操作")
+            print("操作已取消")
+            return
+        
+        wechat_auto.logger.info("✅ 用户确认继续，开始执行群发操作...")
+        print("🚀 开始执行群发操作...")
         
         # time.sleep(3)
 

@@ -31,6 +31,7 @@ try:
     OCR_AVAILABLE = True
 except ImportError:
     OCR_AVAILABLE = False
+    easyocr = None
     print("警告: easyocr 未安装，OCR功能将不可用")
 
 from .utils import logger, config, RpaException
@@ -67,7 +68,7 @@ class Locator:
         """延迟初始化OCR读取器"""
         if not self._ocr_initialized:
             self._ocr_initialized = True
-            if OCR_AVAILABLE:
+            if OCR_AVAILABLE and easyocr is not None:
                 try:
                     self._ocr_reader = easyocr.Reader(['ch_sim', 'en'], gpu=False)
                 except Exception as e:
@@ -756,6 +757,211 @@ class WindowLocator(Locator):
                 return False
         except Exception as e:
             logger.error(f"检查窗口状态失败: {e}")
+            return False
+    
+    def set_window_size(self, hwnd: int, width: int, height: int) -> bool:
+        """
+        设置窗口大小
+        
+        Args:
+            hwnd: 窗口句柄
+            width: 窗口宽度
+            height: 窗口高度
+            
+        Returns:
+            是否设置成功
+        """
+        if not WIN32_AVAILABLE:
+            logger.error("Windows API不可用，无法设置窗口大小")
+            return False
+        
+        try:
+            # 获取当前窗口位置和大小
+            rect = win32gui.GetWindowRect(hwnd)
+            current_x, current_y = rect[0], rect[1]
+            old_width = rect[2] - rect[0]
+            old_height = rect[3] - rect[1]
+            
+            # 设置窗口大小和位置
+            win32gui.SetWindowPos(
+                hwnd,
+                0,  # hWndInsertAfter
+                current_x,  # X
+                current_y,  # Y
+                width,  # cx
+                height,  # cy
+                win32con.SWP_NOZORDER | win32con.SWP_NOACTIVATE
+            )
+            
+            # 等待窗口调整完成
+            time.sleep(0.1)
+            
+            # 获取调整后的窗口信息来验证是否成功
+            new_rect = win32gui.GetWindowRect(hwnd)
+            new_width = new_rect[2] - new_rect[0]
+            new_height = new_rect[3] - new_rect[1]
+            
+            # 检查窗口大小是否被成功调整（允许小范围误差）
+            width_diff = abs(new_width - width)
+            height_diff = abs(new_height - height)
+            
+            # 允许5像素的误差范围
+            tolerance = 5
+            
+            if width_diff <= tolerance and height_diff <= tolerance:
+                logger.info(f"窗口大小设置成功: {new_width}x{new_height}")
+                return True
+            else:
+                logger.warning(f"窗口大小调整可能不完全精确: 目标({width}x{height}), 实际({new_width}x{new_height})")
+                # 即使不完全精确，只要有明显变化就认为成功
+                if (abs(new_width - old_width) > tolerance or abs(new_height - old_height) > tolerance):
+                    logger.info("窗口大小已发生变化，认为调整成功")
+                    return True
+                else:
+                    logger.error("窗口大小未发生变化，调整失败")
+                    return False
+                
+        except Exception as e:
+            logger.error(f"设置窗口大小失败: {e}")
+            return False
+    
+    def set_window_position(self, hwnd: int, x: int, y: int) -> bool:
+        """
+        设置窗口位置
+        
+        Args:
+            hwnd: 窗口句柄
+            x: 窗口X坐标
+            y: 窗口Y坐标
+            
+        Returns:
+            是否设置成功
+        """
+        if not WIN32_AVAILABLE:
+            logger.error("Windows API不可用，无法设置窗口位置")
+            return False
+        
+        try:
+            # 获取当前窗口大小和位置
+            rect = win32gui.GetWindowRect(hwnd)
+            current_width = rect[2] - rect[0]
+            current_height = rect[3] - rect[1]
+            old_x = rect[0]
+            old_y = rect[1]
+            
+            # 设置窗口位置
+            win32gui.SetWindowPos(
+                hwnd,
+                0,  # hWndInsertAfter
+                x,  # X
+                y,  # Y
+                current_width,  # cx
+                current_height,  # cy
+                win32con.SWP_NOZORDER | win32con.SWP_NOACTIVATE
+            )
+            
+            # 等待窗口调整完成
+            time.sleep(0.1)
+            
+            # 获取调整后的窗口信息来验证是否成功
+            new_rect = win32gui.GetWindowRect(hwnd)
+            new_x = new_rect[0]
+            new_y = new_rect[1]
+            
+            # 检查窗口位置是否被成功调整（允许小范围误差）
+            x_diff = abs(new_x - x)
+            y_diff = abs(new_y - y)
+            
+            # 允许5像素的误差范围
+            tolerance = 5
+            
+            if x_diff <= tolerance and y_diff <= tolerance:
+                logger.info(f"窗口位置设置成功: ({new_x}, {new_y})")
+                return True
+            else:
+                logger.warning(f"窗口位置调整可能不完全精确: 目标({x}, {y}), 实际({new_x}, {new_y})")
+                # 即使不完全精确，只要有明显变化就认为成功
+                if (abs(new_x - old_x) > tolerance or abs(new_y - old_y) > tolerance):
+                    logger.info("窗口位置已发生变化，认为调整成功")
+                    return True
+                else:
+                    logger.error("窗口位置未发生变化，调整失败")
+                    return False
+                
+        except Exception as e:
+            logger.error(f"设置窗口位置失败: {e}")
+            return False
+    
+    def set_window_size_and_position(self, hwnd: int, x: int, y: int, width: int, height: int) -> bool:
+        """
+        同时设置窗口大小和位置
+        
+        Args:
+            hwnd: 窗口句柄
+            x: 窗口X坐标
+            y: 窗口Y坐标
+            width: 窗口宽度
+            height: 窗口高度
+            
+        Returns:
+            是否设置成功
+        """
+        if not WIN32_AVAILABLE:
+            logger.error("Windows API不可用，无法设置窗口大小和位置")
+            return False
+        
+        try:
+            # 获取调整前的窗口信息
+            old_rect = win32gui.GetWindowRect(hwnd)
+            old_width = old_rect[2] - old_rect[0]
+            old_height = old_rect[3] - old_rect[1]
+            
+            # 同时设置窗口大小和位置
+            win32gui.SetWindowPos(
+                hwnd,
+                0,  # hWndInsertAfter
+                x,  # X
+                y,  # Y
+                width,  # cx
+                height,  # cy
+                win32con.SWP_NOZORDER | win32con.SWP_NOACTIVATE
+            )
+            
+            # 等待窗口调整完成
+            time.sleep(0.1)
+            
+            # 获取调整后的窗口信息来验证是否成功
+            new_rect = win32gui.GetWindowRect(hwnd)
+            new_width = new_rect[2] - new_rect[0]
+            new_height = new_rect[3] - new_rect[1]
+            new_x = new_rect[0]
+            new_y = new_rect[1]
+            
+            # 检查窗口是否被成功调整（允许小范围误差）
+            width_diff = abs(new_width - width)
+            height_diff = abs(new_height - height)
+            x_diff = abs(new_x - x)
+            y_diff = abs(new_y - y)
+            
+            # 允许5像素的误差范围
+            tolerance = 5
+            
+            if (width_diff <= tolerance and height_diff <= tolerance and 
+                x_diff <= tolerance and y_diff <= tolerance):
+                logger.info(f"窗口大小和位置设置成功: {new_width}x{new_height} at ({new_x}, {new_y})")
+                return True
+            else:
+                logger.warning(f"窗口调整可能不完全精确: 目标({width}x{height} at ({x}, {y})), 实际({new_width}x{new_height} at ({new_x}, {new_y}))")
+                # 即使不完全精确，只要有明显变化就认为成功
+                if (abs(new_width - old_width) > tolerance or abs(new_height - old_height) > tolerance):
+                    logger.info("窗口大小已发生变化，认为调整成功")
+                    return True
+                else:
+                    logger.error("窗口大小和位置未发生变化，调整失败")
+                    return False
+                
+        except Exception as e:
+            logger.error(f"设置窗口大小和位置失败: {e}")
             return False
 
 
