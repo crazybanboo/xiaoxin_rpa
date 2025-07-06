@@ -13,8 +13,9 @@ keyboard:
   type_interval: 0.05
 logging:
   backup_count: 5
-  level: INFO
+  level: DEBUG
   max_file_size: 10MB
+  enable_master_log: true
 mouse:
   click_delay: 0.1
   double_click_interval: 0.1

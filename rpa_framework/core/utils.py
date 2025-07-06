@@ -34,12 +34,16 @@ class RpaLogger:
     """日志管理器"""
     
     _instances = {}  # 单例模式存储实例
+    _master_logger = None  # 总日志记录器
     
     def __init__(self, name: str = "RPA", log_dir: str = "logs"):
         self.name = name
-        self.log_dir = Path(log_dir)
-        self.log_dir.mkdir(exist_ok=True)
+        # 获取项目根目录
+        project_root = Path(__file__).parent.parent
+        self.log_dir = project_root / log_dir
+        self.log_dir.mkdir(parents=True, exist_ok=True)
         self._setup_logger()
+        self._setup_master_logger()
     
     @classmethod
     def get_logger(cls, name: str = "RPA", log_dir: str = "logs") -> 'RpaLogger':
@@ -47,6 +51,33 @@ class RpaLogger:
         if name not in cls._instances:
             cls._instances[name] = cls(name, log_dir)
         return cls._instances[name]
+    
+    @classmethod
+    def reset_instances(cls):
+        """重置单例缓存"""
+        cls._instances.clear()
+        cls._master_logger = None
+    
+    def _setup_master_logger(self):
+        """设置总日志记录器（所有模块的日志都写入此文件）"""
+        if RpaLogger._master_logger is None:
+            master_logger = logging.getLogger("RPA_MASTER")
+            master_logger.setLevel(logging.DEBUG)
+            
+            # 清除已有的处理器
+            master_logger.handlers.clear()
+            
+            # 总日志文件处理器
+            master_log_file = self.log_dir / f"all_logs_{datetime.now().strftime('%Y%m%d')}.log"
+            master_file_handler = logging.FileHandler(master_log_file, encoding='utf-8')
+            master_file_handler.setLevel(logging.DEBUG)
+            master_format = logging.Formatter(
+                '%(asctime)s [%(levelname)s] [%(module_name)s] %(caller_file)s:%(caller_line)d - %(message)s'
+            )
+            master_file_handler.setFormatter(master_format)
+            master_logger.addHandler(master_file_handler)
+            
+            RpaLogger._master_logger = master_logger
     
     def _setup_logger(self):
         """设置日志器"""
@@ -56,11 +87,11 @@ class RpaLogger:
         # 清除已有的处理器
         self.logger.handlers.clear()
         
-        # 控制台处理器（彩色输出）
+        # 控制台处理器（彩色输出，显示所有等级）
         console_handler = colorlog.StreamHandler()
-        console_handler.setLevel(logging.DEBUG)
+        console_handler.setLevel(logging.DEBUG)  # 改为DEBUG，显示所有等级
         console_format = colorlog.ColoredFormatter(
-            '%(log_color)s%(asctime)s [%(levelname)s] %(caller_file)s:%(caller_line)d - %(message)s',
+            '%(log_color)s%(asctime)s [%(levelname)s] [%(name)s] %(caller_file)s:%(caller_line)d - %(message)s',
             datefmt='%H:%M:%S',
             log_colors={
                 'DEBUG': 'cyan',
@@ -72,7 +103,7 @@ class RpaLogger:
         )
         console_handler.setFormatter(console_format)
         
-        # 文件处理器
+        # 模块单独文件处理器
         log_file = self.log_dir / f"{self.name}_{datetime.now().strftime('%Y%m%d')}.log"
         file_handler = logging.FileHandler(log_file, encoding='utf-8')
         file_handler.setLevel(logging.DEBUG)
@@ -83,6 +114,25 @@ class RpaLogger:
         
         self.logger.addHandler(console_handler)
         self.logger.addHandler(file_handler)
+    
+    def _log_to_master(self, level: str, message: str, filename: str, lineno: int):
+        """同时写入总日志文件"""
+        if RpaLogger._master_logger:
+            extra = {
+                'module_name': self.name,
+                'caller_file': filename,
+                'caller_line': lineno
+            }
+            if level == 'DEBUG':
+                RpaLogger._master_logger.debug(message, extra=extra)
+            elif level == 'INFO':
+                RpaLogger._master_logger.info(message, extra=extra)
+            elif level == 'WARNING':
+                RpaLogger._master_logger.warning(message, extra=extra)
+            elif level == 'ERROR':
+                RpaLogger._master_logger.error(message, extra=extra)
+            elif level == 'CRITICAL':
+                RpaLogger._master_logger.critical(message, extra=extra)
     
     def _get_caller_info(self):
         """获取真实调用者的文件名和行号"""
@@ -104,33 +154,40 @@ class RpaLogger:
         """调试日志"""
         filename, lineno = self._get_caller_info()
         self.logger.debug(message, extra={'caller_file': filename, 'caller_line': lineno})
+        self._log_to_master('DEBUG', message, filename, lineno)
     
     def info(self, message: str):
         """信息日志"""
         filename, lineno = self._get_caller_info()
         self.logger.info(message, extra={'caller_file': filename, 'caller_line': lineno})
+        self._log_to_master('INFO', message, filename, lineno)
     
     def warning(self, message: str):
         """警告日志"""
         filename, lineno = self._get_caller_info()
         self.logger.warning(message, extra={'caller_file': filename, 'caller_line': lineno})
+        self._log_to_master('WARNING', message, filename, lineno)
     
     def error(self, message: str):
         """错误日志"""
         filename, lineno = self._get_caller_info()
         self.logger.error(message, extra={'caller_file': filename, 'caller_line': lineno})
+        self._log_to_master('ERROR', message, filename, lineno)
     
     def critical(self, message: str):
         """严重错误日志"""
         filename, lineno = self._get_caller_info()
         self.logger.critical(message, extra={'caller_file': filename, 'caller_line': lineno})
+        self._log_to_master('CRITICAL', message, filename, lineno)
 
 
 class ConfigManager:
     """配置管理器"""
     
-    def __init__(self, config_file: str = "rpa_framework/config/settings.yaml"):
-        self.config_file = Path(config_file)
+    def __init__(self, config_file: str = "config/settings.yaml"):
+        # 获取项目根目录
+        project_root = Path(__file__).parent.parent
+        self.config_file = project_root / config_file
         self.config_file.parent.mkdir(exist_ok=True)
         self._config = {}
         self.load_config()
@@ -217,7 +274,9 @@ class ScreenCapture:
     """屏幕截图工具"""
     
     def __init__(self, screenshot_dir: str = "logs/screenshots"):
-        self.screenshot_dir = Path(screenshot_dir)
+        # 获取项目根目录
+        project_root = Path(__file__).parent.parent
+        self.screenshot_dir = project_root / screenshot_dir
         self.screenshot_dir.mkdir(parents=True, exist_ok=True)
     
     def screenshot(self, region: Optional[Tuple[int, int, int, int]] = None, 
@@ -294,6 +353,8 @@ class ErrorHandler:
 
 
 # 全局实例
+# 清理可能存在的旧实例
+RpaLogger.reset_instances()
 logger = RpaLogger.get_logger()
 config = ConfigManager()
 screen_capture = ScreenCapture()

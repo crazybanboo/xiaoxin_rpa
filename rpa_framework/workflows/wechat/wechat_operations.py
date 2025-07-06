@@ -7,11 +7,18 @@ from typing import List, Optional, Tuple, Dict, Any
 from dataclasses import dataclass
 import logging
 
-from ...core.locator import CompositeLocator, ImageLocator
-from ...core.mouse import MouseController
-from ...core.keyboard import KeyboardController
-from ...core.utils import RpaException, screen_capture
-from .exceptions import WechatOperationError
+import sys
+from pathlib import Path
+
+# 添加项目根目录到Python路径
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
+
+from core.locator import CompositeLocator, ImageLocator
+from core.mouse import MouseController
+from core.keyboard import KeyboardController
+from core.utils import RpaException, screen_capture
+from workflows.wechat.exceptions import WechatOperationError
 
 
 @dataclass
@@ -63,9 +70,6 @@ class WechatOperationInterface:
         try:
             confidence = confidence or self.template_confidence
             self.logger.debug(f"查找按钮模板: {template_path}, 置信度: {confidence}")
-            
-            # 获取当前屏幕截图
-            screenshot = screen_capture.screenshot()
             
             # 使用图像定位器查找模板
             result = self.locator.image_locator.locate_by_template(template_path, confidence=confidence)

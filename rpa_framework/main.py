@@ -6,6 +6,7 @@ RPA框架 - 主程序入口
 import sys
 import os
 import time
+import signal
 from pathlib import Path
 
 # 添加项目根目录到Python路径
@@ -17,6 +18,7 @@ from core.locator import CoordinateLocator, ImageLocator, WindowLocator, locator
 from core.mouse import MouseController
 from core.keyboard import KeyboardController, LanguageType
 from core.waiter import WaitController
+from workflows.wechat.wechat_half_auto import main1 as wechat_main1
 
 class RpaFramework:
     """RPA框架主类"""
@@ -36,7 +38,55 @@ class RpaFramework:
         self.waiter = WaitController(image_locator=self.image_locator)
         self.screen_capture = ScreenCapture()
         
+        # 程序运行状态
+        self.running = True
+        
+        # 设置F12终止程序功能
+        self.setup_f12_exit()
+        
         self.logger.info("RPA框架初始化完成")
+    
+    def setup_f12_exit(self):
+        """设置F12键终止程序功能"""
+        try:
+            def on_f12_pressed():
+                """F12按键回调函数"""
+                self.logger.info("检测到F12按键，正在终止程序...")
+                print("\n🔥 检测到F12按键，程序即将终止...")
+                self.running = False
+                
+                # 停止全局键盘监听
+                self.keyboard.stop_global_listener()
+                
+                # 强制退出程序
+                os._exit(0)
+            
+            # 添加F12全局热键监听
+            success = self.keyboard.add_global_hotkey('f12', on_f12_pressed, suppress=True)
+            if success:
+                # 启动全局键盘监听
+                self.keyboard.start_global_listener()
+                self.logger.info("F12终止程序功能已启用")
+                print("💡 提示：按F12键可随时终止程序")
+            else:
+                self.logger.warning("F12终止程序功能启用失败")
+                print("⚠️  警告：F12终止程序功能启用失败")
+                
+        except Exception as e:
+            self.logger.error(f"设置F12终止程序功能失败: {e}")
+            print(f"❌ 设置F12终止程序功能失败: {e}")
+    
+    def cleanup(self):
+        """清理资源"""
+        try:
+            self.logger.info("正在清理资源...")
+            # 停止全局键盘监听
+            if hasattr(self, 'keyboard'):
+                self.keyboard.stop_global_listener()
+            print("✅ 资源清理完成")
+        except Exception as e:
+            self.logger.error(f"资源清理失败: {e}")
+            print(f"❌ 资源清理失败: {e}")
 
     def demo_basic_operations(self):
         """演示基本操作"""
@@ -289,12 +339,13 @@ class RpaFramework:
 
 def main():
     """主函数"""
+    rpa = None
     try:
         # 创建RPA框架实例
         rpa = RpaFramework()
         
         # 显示菜单
-        while True:
+        while rpa.running:
             print("\\n" + "=" * 40)
             print("RPA框架测试菜单")
             print("=" * 40)
@@ -306,10 +357,15 @@ def main():
             print("6. IME输入法控制测试")
             print("7. 查看当前鼠标位置")
             print("8. 截取屏幕截图")
+            print("9. 企业微信半自动化群发")
             print("0. 退出")
             print("=" * 40)
             
-            choice = input("请选择操作 (0-8): ").strip()
+            try:
+                choice = input("请选择操作 (0-9): ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print("\\n程序被用户中断")
+                break
             
             if choice == '0':
                 print("退出程序")
@@ -333,6 +389,12 @@ def main():
                 filename = f"screenshot_{int(time.time())}.png"
                 rpa.screen_capture.screenshot(filename=filename)
                 print(f"截图已保存: {filename}")
+            elif choice == '9':
+                print("启动企业微信半自动化群发功能...")
+                try:
+                    wechat_main1()
+                except Exception as e:
+                    print(f"企业微信半自动化功能执行失败: {e}")
             else:
                 print("无效选择，请重新输入")
     
@@ -340,6 +402,10 @@ def main():
         print("\\n程序被用户中断")
     except Exception as e:
         print(f"程序运行出现错误: {e}")
+    finally:
+        # 清理资源
+        if rpa:
+            rpa.cleanup()
 
 if __name__ == "__main__":
     main() 

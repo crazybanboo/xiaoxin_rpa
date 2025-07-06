@@ -5,8 +5,10 @@ RPA框架 - 键盘操作模块
 
 import time
 import pyautogui
+import keyboard
+import threading
 from enum import Enum
-from typing import List, Union, Optional
+from typing import List, Union, Optional, Callable
 from .utils import RpaLogger, RpaException, ConfigManager
 
 # 配置PyAutoGUI
@@ -67,6 +69,11 @@ class KeyboardController:
             'f5': 'f5', 'f6': 'f6', 'f7': 'f7', 'f8': 'f8',
             'f9': 'f9', 'f10': 'f10', 'f11': 'f11', 'f12': 'f12'
         }
+        
+        # 全局键盘监听相关
+        self._global_listeners = {}
+        self._listener_thread = None
+        self._stop_listening = False
     
     def get_active_window_handle(self) -> Optional[int]:
         """
@@ -393,6 +400,121 @@ class KeyboardController:
         except Exception as e:
             self.logger.error(f"模拟输入失败: {e}")
             raise RpaException(f"模拟输入失败: {e}")
+    
+    def add_global_hotkey(self, key: str, callback: Callable, suppress: bool = False) -> bool:
+        """
+        添加全局热键监听
+        
+        Args:
+            key: 热键名称（如 'f12', 'ctrl+c' 等）
+            callback: 回调函数
+            suppress: 是否抑制原始按键事件
+            
+        Returns:
+            bool: 操作是否成功
+        """
+        try:
+            self.logger.info(f"添加全局热键监听: {key}")
+            
+            # 使用keyboard库添加热键
+            keyboard.add_hotkey(key, callback, suppress=suppress)
+            self._global_listeners[key] = callback
+            
+            return True
+        except Exception as e:
+            self.logger.error(f"添加全局热键失败: {e}")
+            return False
+    
+    def remove_global_hotkey(self, key: str) -> bool:
+        """
+        移除全局热键监听
+        
+        Args:
+            key: 热键名称
+            
+        Returns:
+            bool: 操作是否成功
+        """
+        try:
+            self.logger.info(f"移除全局热键监听: {key}")
+            
+            if key in self._global_listeners:
+                keyboard.remove_hotkey(key)
+                del self._global_listeners[key]
+                return True
+            else:
+                self.logger.warning(f"未找到热键监听: {key}")
+                return False
+        except Exception as e:
+            self.logger.error(f"移除全局热键失败: {e}")
+            return False
+    
+    def start_global_listener(self) -> bool:
+        """
+        启动全局键盘监听
+        
+        Returns:
+            bool: 操作是否成功
+        """
+        try:
+            if self._listener_thread is not None and self._listener_thread.is_alive():
+                self.logger.warning("全局键盘监听已在运行")
+                return True
+            
+            self.logger.info("启动全局键盘监听")
+            self._stop_listening = False
+            
+            def listener_worker():
+                try:
+                    # 开始监听键盘事件
+                    keyboard.wait()
+                except Exception as e:
+                    self.logger.error(f"键盘监听线程异常: {e}")
+            
+            self._listener_thread = threading.Thread(target=listener_worker, daemon=True)
+            self._listener_thread.start()
+            
+            return True
+        except Exception as e:
+            self.logger.error(f"启动全局键盘监听失败: {e}")
+            return False
+    
+    def stop_global_listener(self) -> bool:
+        """
+        停止全局键盘监听
+        
+        Returns:
+            bool: 操作是否成功
+        """
+        try:
+            self.logger.info("停止全局键盘监听")
+            
+            # 清除所有热键
+            for key in list(self._global_listeners.keys()):
+                self.remove_global_hotkey(key)
+            
+            # 停止监听
+            self._stop_listening = True
+            
+            # 等待监听线程结束
+            if self._listener_thread is not None and self._listener_thread.is_alive():
+                self._listener_thread.join(timeout=1.0)
+            
+            return True
+        except Exception as e:
+            self.logger.error(f"停止全局键盘监听失败: {e}")
+            return False
+    
+    def is_listening(self) -> bool:
+        """
+        检查是否正在监听
+        
+        Returns:
+            bool: 是否正在监听
+        """
+        return (self._listener_thread is not None and 
+                self._listener_thread.is_alive() and 
+                not self._stop_listening)
 
 # 全局键盘控制器实例（延迟创建）
 _global_keyboard = None
@@ -435,4 +557,24 @@ def clear_text(method: str = 'ctrl_a') -> bool:
 
 def change_language(language: LanguageType) -> bool:
     """切换输入法语言"""
-    return _get_global_keyboard().change_language(language) 
+    return _get_global_keyboard().change_language(language)
+
+def add_global_hotkey(key: str, callback: Callable, suppress: bool = False) -> bool:
+    """添加全局热键监听"""
+    return _get_global_keyboard().add_global_hotkey(key, callback, suppress)
+
+def remove_global_hotkey(key: str) -> bool:
+    """移除全局热键监听"""
+    return _get_global_keyboard().remove_global_hotkey(key)
+
+def start_global_listener() -> bool:
+    """启动全局键盘监听"""
+    return _get_global_keyboard().start_global_listener()
+
+def stop_global_listener() -> bool:
+    """停止全局键盘监听"""
+    return _get_global_keyboard().stop_global_listener()
+
+def is_listening() -> bool:
+    """检查是否正在监听"""
+    return _get_global_keyboard().is_listening() 

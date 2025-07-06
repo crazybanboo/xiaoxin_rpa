@@ -12,12 +12,23 @@ from .utils import RpaLogger, RpaException
 pyautogui.FAILSAFE = True  # 启用故障安全
 pyautogui.PAUSE = 0.1     # 操作间隔
 
+# 添加 Windows API 支持
+try:
+    import win32api
+    import win32con
+    import win32gui
+    HAS_WIN32 = True
+except ImportError:
+    HAS_WIN32 = False
+
 class MouseController:
     """鼠标控制器类"""
     
     def __init__(self):
         self.logger = RpaLogger.get_logger(__name__)
         self.logger.info("鼠标控制器初始化完成")
+        # 禁用 pyautogui 的安全检查
+        pyautogui.FAILSAFE = False
     
     def get_position(self) -> Tuple[int, int]:
         """获取当前鼠标位置"""
@@ -205,6 +216,92 @@ class MouseController:
         except Exception as e:
             self.logger.error(f"滚轮操作失败: {e}")
             raise RpaException(f"滚轮操作失败: {e}")
+    
+    def scroll_advanced(self, pixels: int, x: Optional[int] = None, y: Optional[int] = None) -> bool:
+        """
+        高级滚动操作（使用 Windows API，支持像素级滚动）
+        
+        Args:
+            pixels: 滚动像素数（正数向上，负数向下）
+            x: 滚动位置X坐标（None表示当前位置）
+            y: 滚动位置Y坐标（None表示当前位置）
+            
+        Returns:
+            bool: 操作是否成功
+        """
+        try:
+            if not HAS_WIN32:
+                self.logger.warning("Windows API 不可用，使用标准滚动方法")
+                # 将像素转换为滚动次数（大概估算）
+                clicks = pixels // 120  # 通常每次滚动约120像素
+                return self.scroll(clicks, x, y)
+            
+            # 获取滚动位置
+            if x is None or y is None:
+                current_pos = self.get_position()
+                scroll_x = x if x is not None else current_pos[0]
+                scroll_y = y if y is not None else current_pos[1]
+            else:
+                scroll_x, scroll_y = x, y
+            
+            self.logger.info(f"高级滚动: 在位置({scroll_x}, {scroll_y})滚动{pixels}像素")
+            
+            # 获取窗口句柄
+            hwnd = win32gui.WindowFromPoint((scroll_x, scroll_y))
+            
+            # 计算滚动量（Windows API 使用的是 120 的倍数）
+            delta = pixels * 120 // 120
+            
+            # 发送滚动消息
+            win32gui.SendMessage(hwnd, win32con.WM_MOUSEWHEEL, delta << 16, (scroll_y << 16) | scroll_x)
+            
+            return True
+        except Exception as e:
+            self.logger.error(f"高级滚动失败: {e}")
+            # 回退到标准滚动方法
+            clicks = pixels // 120
+            return self.scroll(clicks, x, y)
+    
+    def scroll_smooth(self, total_pixels: int, steps: int = 10, delay: float = 0.05, 
+                     x: Optional[int] = None, y: Optional[int] = None) -> bool:
+        """
+        平滑滚动操作
+        
+        Args:
+            total_pixels: 总滚动像素数
+            steps: 分解为多少步
+            delay: 每步之间的延迟（秒）
+            x: 滚动位置X坐标
+            y: 滚动位置Y坐标
+            
+        Returns:
+            bool: 操作是否成功
+        """
+        try:
+            pixels_per_step = total_pixels // steps
+            remainder = total_pixels % steps
+            
+            self.logger.info(f"平滑滚动: 总共{total_pixels}像素，分{steps}步，每步{pixels_per_step}像素")
+            
+            for i in range(steps):
+                # 最后一步加上余数
+                current_pixels = pixels_per_step + (remainder if i == steps - 1 else 0)
+                
+                if HAS_WIN32:
+                    self.scroll_advanced(current_pixels, x, y)
+                else:
+                    # 使用标准滚动方法
+                    clicks = current_pixels // 120
+                    if clicks != 0:
+                        self.scroll(clicks, x, y)
+                
+                if i < steps - 1:  # 最后一步不需要延迟
+                    time.sleep(delay)
+            
+            return True
+        except Exception as e:
+            self.logger.error(f"平滑滚动失败: {e}")
+            raise RpaException(f"平滑滚动失败: {e}")
     
     def mouse_down(self, x: Optional[int] = None, y: Optional[int] = None, button: str = 'left') -> bool:
         """

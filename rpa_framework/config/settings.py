@@ -63,12 +63,14 @@ class WindowSettings:
 @dataclass
 class LoggingSettings:
     """日志设置"""
-    level: str = "INFO"
+    level: str = "DEBUG"  # 默认显示所有等级日志
     max_file_size: str = "10MB"
     backup_count: int = 5
-    log_format: str = "%(asctime)s [%(levelname)s] %(funcName)s:%(lineno)d - %(message)s"
-    console_format: str = "%(log_color)s%(asctime)s [%(levelname)s] %(message)s"
+    log_format: str = "%(asctime)s [%(levelname)s] [%(module_name)s] %(caller_file)s:%(caller_line)d - %(message)s"
+    console_format: str = "%(log_color)s%(asctime)s [%(levelname)s] [%(name)s] %(caller_file)s:%(caller_line)d - %(message)s"
     date_format: str = "%H:%M:%S"
+    enable_master_log: bool = True  # 启用总日志文件
+    master_log_format: str = "%(asctime)s [%(levelname)s] [%(module_name)s] %(caller_file)s:%(caller_line)d - %(message)s"
 
 
 @dataclass
@@ -96,8 +98,10 @@ class WechatSettings:
 class Settings:
     """RPA框架配置管理器"""
     
-    def __init__(self, config_file: str = "rpa_framework/config/settings.yaml"):
-        self.config_file = Path(config_file)
+    def __init__(self, config_file: str = "config/settings.yaml"):
+        # 获取项目根目录
+        project_root = Path(__file__).parent.parent
+        self.config_file = project_root / config_file
         self.config_file.parent.mkdir(exist_ok=True)
         
         # 初始化各个配置组

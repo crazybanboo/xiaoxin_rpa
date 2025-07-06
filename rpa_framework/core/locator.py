@@ -257,6 +257,170 @@ class ImageLocator(Locator):
             logger.error(f"图像定位失败: {e}")
             return None
     
+    def locate_all_by_template(self, template_path: str, 
+                             confidence: Optional[float] = None,
+                             region: Optional[Tuple[int, int, int, int]] = None,
+                             grayscale: Optional[bool] = None,
+                             max_results: int = 10) -> List[Tuple[int, int, int, int]]:
+        """
+        通过模板匹配定位所有匹配的元素
+        
+        Args:
+            template_path: 模板图片路径
+            confidence: 匹配置信度，默认使用配置值
+            region: 搜索区域 (left, top, width, height)
+            grayscale: 是否使用灰度匹配
+            max_results: 最大返回结果数量
+            
+        Returns:
+            匹配区域列表 [(left, top, right, bottom), ...]
+        """
+        if not CV2_AVAILABLE:
+            logger.error("OpenCV不可用，无法进行图像匹配")
+            return []
+            
+        if confidence is None:
+            confidence = config.get('image.confidence', 0.8)
+        if grayscale is None:
+            grayscale = config.get('image.grayscale', True)
+        
+        try:
+            # 加载模板图片
+            template = self._load_template(template_path, grayscale if grayscale is not None else True)
+            if template is None:
+                return []
+            
+            # 获取屏幕截图
+            screenshot = self.get_screenshot(region)
+            
+            # 确保screenshot是numpy数组格式
+            if not isinstance(screenshot, np.ndarray):
+                screenshot = np.array(screenshot)
+            
+            # 转换为OpenCV格式
+            if grayscale:
+                if len(screenshot.shape) == 3:
+                    screenshot = cv2.cvtColor(screenshot, cv2.COLOR_RGB2GRAY)
+                if len(template.shape) == 3:
+                    template = cv2.cvtColor(template, cv2.COLOR_RGB2GRAY)
+            else:
+                if len(screenshot.shape) == 3:
+                    screenshot = cv2.cvtColor(screenshot, cv2.COLOR_RGB2BGR)
+                if len(template.shape) == 3:
+                    template = cv2.cvtColor(template, cv2.COLOR_RGB2BGR)
+            
+            # 模板匹配
+            result = cv2.matchTemplate(screenshot, template, cv2.TM_CCOEFF_NORMED)
+            h, w = template.shape[:2]
+            
+            # 找到所有匹配的位置
+            locations = np.where(result >= (confidence if confidence is not None else 0.8))
+            matches = []
+            
+            # 将匹配位置转换为矩形区域
+            for pt in zip(*locations[::-1]):  # 交换x和y坐标
+                left = pt[0]
+                top = pt[1]
+                
+                # 如果指定了搜索区域，需要调整坐标
+                if region:
+                    left += region[0]
+                    top += region[1]
+                
+                right = left + w
+                bottom = top + h
+                confidence_score = result[pt[1], pt[0]]
+                
+                matches.append((left, top, right, bottom, confidence_score))
+            
+            # 去重：移除重叠的匹配
+            filtered_matches = self._filter_overlapping_matches(matches, overlap_threshold=0.5)
+            
+            # 按置信度排序
+            filtered_matches.sort(key=lambda x: x[4], reverse=True)
+            
+            # 限制结果数量
+            filtered_matches = filtered_matches[:max_results]
+            
+            # 返回坐标列表（不包含置信度）
+            result_list = [(match[0], match[1], match[2], match[3]) for match in filtered_matches]
+            
+            logger.debug(f"图像匹配找到 {len(result_list)} 个结果: {template_path}")
+            return result_list
+                
+        except Exception as e:
+            logger.error(f"批量图像定位失败: {e}")
+            return []
+
+    def _filter_overlapping_matches(self, matches: List[Tuple[int, int, int, int, float]], 
+                                  overlap_threshold: float = 0.5) -> List[Tuple[int, int, int, int, float]]:
+        """
+        过滤重叠的匹配结果
+        
+        Args:
+            matches: 匹配结果列表 [(left, top, right, bottom, confidence), ...]
+            overlap_threshold: 重叠阈值
+            
+        Returns:
+            过滤后的匹配结果列表
+        """
+        if not matches:
+            return []
+        
+        # 按置信度排序
+        matches.sort(key=lambda x: x[4], reverse=True)
+        
+        filtered = []
+        for current_match in matches:
+            is_overlapping = False
+            current_rect = current_match[:4]
+            
+            for existing_match in filtered:
+                existing_rect = existing_match[:4]
+                
+                # 计算重叠面积
+                overlap_area = self._calculate_overlap_area(current_rect, existing_rect)
+                current_area = (current_rect[2] - current_rect[0]) * (current_rect[3] - current_rect[1])
+                
+                # 如果重叠面积超过阈值，则认为是重叠的
+                if overlap_area / current_area > overlap_threshold:
+                    is_overlapping = True
+                    break
+            
+            if not is_overlapping:
+                filtered.append(current_match)
+        
+        return filtered
+
+    def _calculate_overlap_area(self, rect1: Tuple[int, int, int, int], 
+                              rect2: Tuple[int, int, int, int]) -> float:
+        """
+        计算两个矩形的重叠面积
+        
+        Args:
+            rect1: 矩形1 (left, top, right, bottom)
+            rect2: 矩形2 (left, top, right, bottom)
+            
+        Returns:
+            重叠面积
+        """
+        left1, top1, right1, bottom1 = rect1
+        left2, top2, right2, bottom2 = rect2
+        
+        # 计算重叠区域
+        overlap_left = max(left1, left2)
+        overlap_top = max(top1, top2)
+        overlap_right = min(right1, right2)
+        overlap_bottom = min(bottom1, bottom2)
+        
+        # 如果没有重叠，返回0
+        if overlap_left >= overlap_right or overlap_top >= overlap_bottom:
+            return 0.0
+        
+        # 计算重叠面积
+        overlap_area = (overlap_right - overlap_left) * (overlap_bottom - overlap_top)
+        return overlap_area
+
     def _load_template(self, template_path: str, grayscale: bool = True):
         """
         加载模板图片
@@ -730,6 +894,28 @@ class CompositeLocator:
                     return self.window_locator.get_window_rect(hwnd)
         
         return None
+
+    def locate_all_by_template(self, template_path: str, 
+                             confidence: Optional[float] = None,
+                             region: Optional[Tuple[int, int, int, int]] = None,
+                             grayscale: Optional[bool] = None,
+                             max_results: int = 10) -> List[Tuple[int, int, int, int]]:
+        """
+        通过模板匹配定位所有匹配的元素
+        
+        Args:
+            template_path: 模板图片路径
+            confidence: 匹配置信度
+            region: 搜索区域
+            grayscale: 是否使用灰度匹配
+            max_results: 最大返回结果数量
+            
+        Returns:
+            匹配区域列表 [(left, top, right, bottom), ...]
+        """
+        return self.image_locator.locate_all_by_template(
+            template_path, confidence, region, grayscale, max_results
+        )
 
 
 # 全局定位器实例
