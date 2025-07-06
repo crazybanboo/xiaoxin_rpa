@@ -230,7 +230,7 @@ config.save()
 
 ### IME输入法控制配置
 
-在`config/settings.yaml`中配置IME控制行为：
+在`rpa_framework/config/settings.yaml`中配置IME控制行为：
 
 ```yaml
 keyboard:

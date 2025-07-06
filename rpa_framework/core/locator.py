@@ -8,6 +8,7 @@ import numpy as np
 import pyautogui
 from typing import Optional, Tuple, List, Union, Dict, Any
 from pathlib import Path
+from dataclasses import dataclass
 
 try:
     import cv2
@@ -33,6 +34,20 @@ except ImportError:
     print("警告: easyocr 未安装，OCR功能将不可用")
 
 from .utils import logger, config, RpaException
+
+
+@dataclass
+class WindowInfo:
+    """窗口信息数据结构"""
+    hwnd: int
+    title: str
+    class_name: str
+    rect: Tuple[int, int, int, int]  # (left, top, right, bottom)
+    width: int
+    height: int
+    center: Tuple[int, int]
+    is_visible: bool
+    is_maximized: bool
 
 
 class Locator:
@@ -399,6 +414,184 @@ class WindowLocator(Locator):
             return True
         except Exception as e:
             logger.error(f"激活窗口失败: {e}")
+            return False
+    
+    def get_window_info(self, hwnd: int) -> Optional[WindowInfo]:
+        """
+        获取窗口详细信息
+        
+        Args:
+            hwnd: 窗口句柄
+            
+        Returns:
+            WindowInfo对象或None
+        """
+        if not WIN32_AVAILABLE:
+            return None
+        
+        try:
+            # 获取窗口标题
+            title = win32gui.GetWindowText(hwnd)
+            
+            # 获取窗口类名
+            class_name = win32gui.GetClassName(hwnd)
+            
+            # 获取窗口矩形区域
+            rect = win32gui.GetWindowRect(hwnd)
+            left, top, right, bottom = rect
+            
+            # 计算宽度、高度和中心点
+            width = right - left
+            height = bottom - top
+            center = (left + width // 2, top + height // 2)
+            
+            # 检查窗口是否可见
+            is_visible = bool(win32gui.IsWindowVisible(hwnd))
+            
+            # 检查窗口是否最大化
+            placement = win32gui.GetWindowPlacement(hwnd)
+            is_maximized = placement[1] == win32con.SW_SHOWMAXIMIZED
+            
+            window_info = WindowInfo(
+                hwnd=hwnd,
+                title=title,
+                class_name=class_name,
+                rect=rect,
+                width=width,
+                height=height,
+                center=center,
+                is_visible=is_visible,
+                is_maximized=is_maximized
+            )
+            
+            logger.debug(f"获取窗口信息: {title} ({width}x{height})")
+            return window_info
+            
+        except Exception as e:
+            logger.error(f"获取窗口信息失败: {e}")
+            return None
+    
+    def get_window_size(self, hwnd: int) -> Optional[Tuple[int, int]]:
+        """
+        获取窗口大小
+        
+        Args:
+            hwnd: 窗口句柄
+            
+        Returns:
+            窗口大小 (width, height) 或 None
+        """
+        window_info = self.get_window_info(hwnd)
+        if window_info:
+            return (window_info.width, window_info.height)
+        return None
+    
+    def get_window_position(self, hwnd: int) -> Optional[Tuple[int, int]]:
+        """
+        获取窗口位置
+        
+        Args:
+            hwnd: 窗口句柄
+            
+        Returns:
+            窗口位置 (left, top) 或 None
+        """
+        window_info = self.get_window_info(hwnd)
+        if window_info:
+            return (window_info.rect[0], window_info.rect[1])
+        return None
+    
+    def get_window_center(self, hwnd: int) -> Optional[Tuple[int, int]]:
+        """
+        获取窗口中心点坐标
+        
+        Args:
+            hwnd: 窗口句柄
+            
+        Returns:
+            窗口中心点 (x, y) 或 None
+        """
+        window_info = self.get_window_info(hwnd)
+        if window_info:
+            return window_info.center
+        return None
+    
+    def convert_to_relative_coords(self, x: int, y: int, hwnd: int) -> Optional[Tuple[float, float]]:
+        """
+        将绝对坐标转换为窗口相对坐标
+        
+        Args:
+            x: 绝对X坐标
+            y: 绝对Y坐标
+            hwnd: 窗口句柄
+            
+        Returns:
+            相对坐标 (x_ratio, y_ratio) 或 None，范围为0-1
+        """
+        window_info = self.get_window_info(hwnd)
+        if not window_info:
+            return None
+        
+        # 计算相对坐标
+        relative_x = (x - window_info.rect[0]) / window_info.width
+        relative_y = (y - window_info.rect[1]) / window_info.height
+        
+        # 确保坐标在有效范围内
+        relative_x = max(0.0, min(1.0, relative_x))
+        relative_y = max(0.0, min(1.0, relative_y))
+        
+        return (relative_x, relative_y)
+    
+    def convert_from_relative_coords(self, x_ratio: float, y_ratio: float, hwnd: int) -> Optional[Tuple[int, int]]:
+        """
+        将窗口相对坐标转换为绝对坐标
+        
+        Args:
+            x_ratio: 相对X坐标 (0-1)
+            y_ratio: 相对Y坐标 (0-1)
+            hwnd: 窗口句柄
+            
+        Returns:
+            绝对坐标 (x, y) 或 None
+        """
+        window_info = self.get_window_info(hwnd)
+        if not window_info:
+            return None
+        
+        # 计算绝对坐标
+        x = int(window_info.rect[0] + x_ratio * window_info.width)
+        y = int(window_info.rect[1] + y_ratio * window_info.height)
+        
+        return (x, y)
+    
+    def is_window_state(self, hwnd: int, state: str) -> bool:
+        """
+        检查窗口状态
+        
+        Args:
+            hwnd: 窗口句柄
+            state: 状态类型 ('visible', 'maximized', 'minimized')
+            
+        Returns:
+            是否为指定状态
+        """
+        if not WIN32_AVAILABLE:
+            return False
+        
+        try:
+            if state == 'visible':
+                return bool(win32gui.IsWindowVisible(hwnd))
+            elif state == 'maximized':
+                placement = win32gui.GetWindowPlacement(hwnd)
+                return placement[1] == win32con.SW_SHOWMAXIMIZED
+            elif state == 'minimized':
+                placement = win32gui.GetWindowPlacement(hwnd)
+                return placement[1] == win32con.SW_SHOWMINIMIZED
+            else:
+                logger.warning(f"未知的窗口状态: {state}")
+                return False
+        except Exception as e:
+            logger.error(f"检查窗口状态失败: {e}")
             return False
 
 

@@ -6,8 +6,8 @@ RPA Framework 配置管理模块
 import os
 import yaml
 from pathlib import Path
-from typing import Dict, Any, Optional
-from dataclasses import dataclass, asdict
+from typing import Dict, Any, Optional, List
+from dataclasses import dataclass, asdict, field
 
 
 @dataclass
@@ -81,10 +81,22 @@ class SecuritySettings:
     sensitive_data_mask: bool = True
 
 
+@dataclass
+class WechatSettings:
+    """企业微信设置"""
+    process_names: List[str] = field(default_factory=lambda: ["WXWork.exe", "企业微信.exe", "WeChatWork.exe", "wxwork.exe"])
+    window_detection_timeout: float = 10.0
+    operation_delay: float = 0.5
+    template_confidence: float = 0.8
+    multi_select_interval: float = 0.2
+    message_send_delay: float = 1.0
+    max_retry_count: int = 3
+    screenshot_on_operation: bool = True
+
 class Settings:
     """RPA框架配置管理器"""
     
-    def __init__(self, config_file: str = "config/settings.yaml"):
+    def __init__(self, config_file: str = "rpa_framework/config/settings.yaml"):
         self.config_file = Path(config_file)
         self.config_file.parent.mkdir(exist_ok=True)
         
@@ -96,6 +108,7 @@ class Settings:
         self.window = WindowSettings()
         self.logging = LoggingSettings()
         self.security = SecuritySettings()
+        self.wechat = WechatSettings()
         
         self.load_config()
     
@@ -121,6 +134,8 @@ class Settings:
                     self._update_dataclass(self.logging, config_data['logging'])
                 if 'security' in config_data:
                     self._update_dataclass(self.security, config_data['security'])
+                if 'wechat' in config_data:
+                    self._update_dataclass(self.wechat, config_data['wechat'])
                     
             except Exception as e:
                 print(f"警告: 加载配置文件失败，使用默认配置: {e}")
@@ -137,7 +152,8 @@ class Settings:
             'image': asdict(self.image),
             'window': asdict(self.window),
             'logging': asdict(self.logging),
-            'security': asdict(self.security)
+            'security': asdict(self.security),
+            'wechat': asdict(self.wechat),
         }
         
         try:
@@ -162,7 +178,8 @@ class Settings:
             'image': asdict(self.image),
             'window': asdict(self.window),
             'logging': asdict(self.logging),
-            'security': asdict(self.security)
+            'security': asdict(self.security),
+            'wechat': asdict(self.wechat),
         }
     
     def update_settings(self, section: str, **kwargs):
@@ -195,6 +212,10 @@ class Settings:
             for key, value in kwargs.items():
                 if hasattr(self.security, key):
                     setattr(self.security, key, value)
+        elif section == 'wechat':
+            for key, value in kwargs.items():
+                if hasattr(self.wechat, key):
+                    setattr(self.wechat, key, value)
         
         # 保存更新后的配置
         self.save_config()

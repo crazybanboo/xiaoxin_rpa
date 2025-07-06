@@ -129,7 +129,7 @@ class RpaLogger:
 class ConfigManager:
     """配置管理器"""
     
-    def __init__(self, config_file: str = "config/settings.yaml"):
+    def __init__(self, config_file: str = "rpa_framework/config/settings.yaml"):
         self.config_file = Path(config_file)
         self.config_file.parent.mkdir(exist_ok=True)
         self._config = {}
