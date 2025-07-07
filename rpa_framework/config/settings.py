@@ -94,6 +94,9 @@ class WechatSettings:
     message_send_delay: float = 1.0
     max_retry_count: int = 3
     screenshot_on_operation: bool = True
+    # 窗口配置
+    window_size: Dict[str, int] = field(default_factory=lambda: {"width": 1200, "height": 800})
+    window_position: Dict[str, int] = field(default_factory=lambda: {"x": 100, "y": 100})
 
 class Settings:
     """RPA框架配置管理器"""
@@ -270,6 +273,67 @@ class Settings:
             return False
         
         return True
+
+    def update_wechat_window_config(self, width: int, height: int, x: int, y: int) -> bool:
+        """
+        更新企业微信窗口配置（只更新窗口相关配置，保持其他配置不变）
+        
+        Args:
+            width: 窗口宽度
+            height: 窗口高度
+            x: 窗口x坐标
+            y: 窗口y坐标
+            
+        Returns:
+            bool: 是否成功保存
+        """
+        try:
+            # 首先更新内存中的配置
+            self.wechat.window_size = {"width": width, "height": height}
+            self.wechat.window_position = {"x": x, "y": y}
+            
+            # 读取现有的YAML文件内容
+            if not self.config_file.exists():
+                # 如果文件不存在，使用完整保存
+                self.save_config()
+                print(f"✅ 企业微信窗口配置已创建: 大小({width}x{height}), 位置({x}, {y})")
+                return True
+            
+            # 读取现有配置
+            with open(self.config_file, 'r', encoding='utf-8') as f:
+                config_data = yaml.safe_load(f) or {}
+            
+            # 确保wechat节存在
+            if 'wechat' not in config_data:
+                config_data['wechat'] = {}
+            
+            # 只更新窗口相关配置
+            config_data['wechat']['window_size'] = {"width": width, "height": height}
+            config_data['wechat']['window_position'] = {"x": x, "y": y}
+            
+            # 写回文件，使用相同的格式选项
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                yaml.dump(config_data, f, default_flow_style=False, 
+                         allow_unicode=True, indent=2, sort_keys=False)
+            
+            print(f"✅ 企业微信窗口配置已更新: 大小({width}x{height}), 位置({x}, {y})")
+            return True
+            
+        except Exception as e:
+            print(f"❌ 更新企业微信窗口配置失败: {str(e)}")
+            return False
+    
+    def get_wechat_window_config(self) -> Dict[str, Dict[str, int]]:
+        """
+        获取企业微信窗口配置
+        
+        Returns:
+            Dict: 包含window_size和window_position的字典
+        """
+        return {
+            "window_size": self.wechat.window_size,
+            "window_position": self.wechat.window_position
+        }
 
 
 # 全局配置实例

@@ -51,6 +51,7 @@ from core.mouse import MouseController
 from core.keyboard import KeyboardController
 from core.wechat_detector import WechatProcessDetector, ProcessInfo
 from core.utils import logger, config, RpaException
+from config.settings import get_settings
 from workflows.wechat.wechat_operations import WechatOperationInterface, OperationResult
 from workflows.wechat.exceptions import WechatNotFoundError, WechatWindowError, WechatOperationError
 
@@ -463,6 +464,43 @@ class WechatHalfAuto:
         self.current_window_info = None
         self.logger.info("资源清理完成")
 
+    def update_window_settings_to_file(self) -> bool:
+        """
+        更新窗口信息到settings.yaml文件
+        
+        Returns:
+            bool: 是否成功保存
+        """
+        try:
+            if not self.current_window_info:
+                self.logger.error("无法获取当前窗口信息")
+                return False
+                
+            # 获取当前窗口的位置和大小
+            rect = self.current_window_info['rect']
+            width = self.current_window_info['width']
+            height = self.current_window_info['height']
+            
+            # 使用全局配置管理器更新窗口配置
+            settings = get_settings()
+            success = settings.update_wechat_window_config(
+                width=width, 
+                height=height, 
+                x=rect[0],  # left
+                y=rect[1]   # top
+            )
+            
+            if success:
+                self.logger.info(f"✅ 窗口配置已保存到settings.yaml: 大小({width}x{height}), 位置({rect[0]}, {rect[1]})")
+            else:
+                self.logger.error("保存窗口配置失败")
+                
+            return success
+            
+        except Exception as e:
+            self.logger.error(f"保存窗口配置失败: {str(e)}")
+            return False
+
 
 def main():
     """主函数 - 演示使用"""
@@ -623,6 +661,43 @@ def main1():
         
         time.sleep(1)
 
+        # 在疯狂连点之前，重新获取窗口信息并保存到settings.yaml
+        wechat_auto.logger.info("🔄 正在更新窗口信息...")
+        
+        # 重新获取当前窗口信息
+        if wechat_auto.current_window_info and wechat_auto.current_process:
+            try:
+                # 获取最新的窗口信息
+                hwnd = wechat_auto.current_window_info['hwnd']
+                updated_window_info = wechat_auto.locator.window_locator.get_window_info(hwnd)
+                
+                if updated_window_info:
+                    # 更新内部窗口信息
+                    wechat_auto.current_window_info = {
+                        'hwnd': updated_window_info.hwnd,
+                        'title': updated_window_info.title,
+                        'rect': updated_window_info.rect,
+                        'width': updated_window_info.width,
+                        'height': updated_window_info.height,
+                        'center': updated_window_info.center,
+                        'is_visible': updated_window_info.is_visible
+                    }
+                    
+                    wechat_auto.logger.info(f"📏 当前窗口信息: 大小({updated_window_info.width}x{updated_window_info.height}), "
+                                          f"位置({updated_window_info.rect[0]}, {updated_window_info.rect[1]})")
+                    
+                    # 保存到settings.yaml
+                    if wechat_auto.update_window_settings_to_file():
+                        wechat_auto.logger.info("💾 窗口配置已自动保存，下次启动时将使用新配置")
+                    else:
+                        wechat_auto.logger.warning("⚠️ 窗口配置保存失败，但不影响当前操作")
+                        
+                else:
+                    wechat_auto.logger.warning("⚠️ 无法获取最新窗口信息，使用缓存信息")
+                    
+            except Exception as e:
+                wechat_auto.logger.warning(f"⚠️ 更新窗口信息时出错，继续使用缓存信息: {str(e)}")
+
         # 再选3个未选框出来
         # 获取项目根目录
         project_root = Path(__file__).parent.parent.parent
@@ -683,9 +758,7 @@ def main1():
         time.sleep(1)
 
         wechat_auto.logger.info("🎯 开始疯狂连点坐标操作")
-        # for i in range(100):
         wechat_auto.get_mouse_controller().click(crazy_click_coordinate[0], crazy_click_coordinate[1], clicks=600, interval=0.01)
-            # time.sleep(0.1)  # 短暂间隔
         wechat_auto.logger.info("✅ 疯狂连点坐标完成")
         
     except Exception as e:
