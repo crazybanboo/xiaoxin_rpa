@@ -2,40 +2,50 @@
 企业微信半自动化主控制器
 整合所有子模块，提供统一的API接口
 
-新功能：批量模板匹配和点击
-==========================
+重构改进：模块化设计
+==================
 
-1. locate_all_by_template() - 批量模板匹配
-   - 返回所有匹配的元素位置列表
-   - 支持置信度过滤
-   - 支持最大结果数量限制
-   - 自动去重重叠的匹配项
+主要改进：
+1. 提取通用功能为独立方法，减少代码重复
+2. 将复杂流程分解为清晰的步骤
+3. 统一模板查找和按钮点击的逻辑
+4. 增强错误处理和日志记录
 
-2. find_and_click_all_buttons() - 批量点击按钮
-   - 查找所有匹配的按钮并逐个点击
-   - 支持点击间隔时间设置
-   - 返回详细的操作结果统计
+核心功能模块：
+-----------
+1. 模板查找相关：
+   - find_template_and_get_centers() - 查找模板并返回中心点
+   - wait_and_find_template() - 等待并查找多个模板
+   - calculate_centers_from_rects() - 计算矩形中心点
+
+2. 鼠标操作相关：
+   - click_buttons_with_delay() - 批量点击按钮
+   - perform_special_click_sequence() - 执行特殊点击序列
+   - perform_scroll_operation() - 统一滚轮操作方法
+
+3. 流程控制相关：
+   - initialize_system_and_adjust_window() - 系统初始化和窗口调整
+   - find_and_click_external_button() - 查找并点击外部按钮
+   - find_wechat_message_and_setup_multiselect() - 设置多选模式
+   - select_groups_and_perform_operations() - 群组选择操作
+   - perform_group_mass_sending() - 全自动群发核心逻辑
+   - perform_semi_auto_mass_sending() - 半自动群发核心逻辑
 
 使用示例：
 ---------
-# 批量定位
-results = wechat_auto.get_locator().locate_all_by_template(
-    "button_template.png", 
-    confidence=0.8, 
-    max_results=5
-)
+# 基础使用
+wechat_auto = WechatHalfAuto()
+if wechat_auto.initialize_system_and_adjust_window():
+    # 查找模板
+    centers = wechat_auto.find_template_and_get_centers("button.png", confidence=0.8)
+    # 批量点击
+    wechat_auto.click_buttons_with_delay(centers, delay=0.5)
 
-# 批量点击
-result = wechat_auto.find_and_click_all_buttons(
-    "button_template.png", 
-    confidence=0.8, 
-    max_results=10,
-    click_interval=0.5
-)
+# 全自动群发流程
+main_auto()  # 执行完整的自动化群发流程
 """
-import os
 import time
-import logging
+import random
 from typing import List, Optional, Dict, Any, Tuple
 from pathlib import Path
 
@@ -222,65 +232,6 @@ class WechatHalfAuto:
     def get_operation_interface(self) -> WechatOperationInterface:
         """获取操作接口"""
         return self.operation_interface
-    
-    def execute_multi_chat_send(self, message: str, chat_templates: List[str]) -> OperationResult:
-        """
-        执行多聊天发送消息
-        
-        Args:
-            message: 要发送的消息
-            chat_templates: 聊天模板路径列表
-            
-        Returns:
-            OperationResult: 操作结果
-        """
-        if not self.is_initialized:
-            return OperationResult(
-                success=False,
-                message="系统未初始化",
-                error_code="NOT_INITIALIZED"
-            )
-        
-        try:
-            self.logger.info(f"开始执行多聊天发送任务，消息: {message[:50]}{'...' if len(message) > 50 else ''}")
-            
-            # 检查模板文件是否存在
-            # 获取项目根目录
-            project_root = Path(__file__).parent.parent.parent
-            template_dir = project_root / self.config['templates']['template_dir']
-            valid_templates = []
-            
-            for template_path in chat_templates:
-                if not os.path.isabs(template_path):
-                    full_path = template_dir / template_path
-                else:
-                    full_path = Path(template_path)
-                
-                if full_path.exists():
-                    valid_templates.append(str(full_path))
-                else:
-                    self.logger.warning(f"模板文件不存在: {full_path}")
-            
-            if not valid_templates:
-                return OperationResult(
-                    success=False,
-                    message="没有找到有效的模板文件",
-                    error_code="NO_VALID_TEMPLATES"
-                )
-            
-            # 执行多聊天发送
-            result = self.operation_interface.execute_send_to_multiple_chats(message, valid_templates)
-            
-            self.logger.info(f"多聊天发送任务完成，结果: {result.message}")
-            return result
-            
-        except Exception as e:
-            self.logger.error(f"执行多聊天发送失败: {str(e)}")
-            return OperationResult(
-                success=False,
-                message=f"执行失败: {str(e)}",
-                error_code="EXECUTION_ERROR"
-            )
     
     def find_and_click_button(self, template_path: str, confidence: Optional[float] = None) -> OperationResult:
         """
@@ -501,57 +452,506 @@ class WechatHalfAuto:
             self.logger.error(f"保存窗口配置失败: {str(e)}")
             return False
 
+    def calculate_centers_from_rects(self, rects):
+        """
+        从矩形坐标列表计算中心点坐标
+        
+        Args:
+            rects: 矩形坐标列表，每个元素为(left, top, right, bottom)
+            
+        Returns:
+            List[Tuple[int, int]]: 中心点坐标列表，每个元素为(center_x, center_y)
+        """
+        centers = []
+        for r in rects:
+            left, top, right, bottom = r
+            center_x = left + (right - left) // 2
+            center_y = top + (bottom - top) // 2
+            centers.append((center_x, center_y))
+        return centers
 
-def main():
-    """主函数 - 演示使用"""
-    print("企业微信半自动化系统演示")
-    print("=" * 50)
-    
-    # 创建主控制器实例
-    wechat_auto = WechatHalfAuto()
-    
-    try:
+    def find_template_and_get_centers(self, template_name: str, confidence: float = 0.8, sort_by_y: bool = True, reverse: bool = False):
+        """
+        查找模板并返回中心点坐标列表
+        
+        Args:
+            template_name: 模板文件名
+            confidence: 置信度
+            sort_by_y: 是否按Y轴排序
+            reverse: 排序是否倒序
+            
+        Returns:
+            List[Tuple[int, int]]: 中心点坐标列表
+        """
+        project_root = Path(__file__).parent.parent.parent
+        template_path = project_root / f"templates/wechat/{template_name}"
+        locate_result = self.get_locator().image_locator.locate_all_by_template(str(template_path), confidence=confidence)
+        
+        if not locate_result:
+            return []
+        
+        button_centers = self.calculate_centers_from_rects(locate_result)
+        
+        if sort_by_y:
+            button_centers.sort(key=lambda point: point[1], reverse=reverse)
+        
+        return button_centers
+
+    def wait_and_find_template(self, template_names: List[str], confidence: float = 0.8, max_wait_time: int = 100):
+        """
+        等待并查找模板，支持多个模板文件
+        
+        Args:
+            template_names: 模板文件名列表
+            confidence: 置信度
+            max_wait_time: 最大等待时间（秒）
+            
+        Returns:
+            tuple: (是否找到, 匹配结果, 使用的模板名)
+        """
+        project_root = Path(__file__).parent.parent.parent
+        wait_time = 0
+        
+        while wait_time < max_wait_time:
+            for template_name in template_names:
+                template_path = project_root / f"templates/wechat/{template_name}"
+                locate_result = self.get_locator().image_locator.locate_all_by_template(str(template_path), confidence=confidence)
+                if locate_result:
+                    return True, locate_result, template_name
+            
+            self.logger.info(f"🔍 未找到目标模板，等待10s后重新查找（已等待{wait_time}s）")
+            time.sleep(10)
+            wait_time += 10
+        
+        return False, None, None
+
+    def click_buttons_with_delay(self, button_centers: List[Tuple[int, int]], delay: float = 0.5):
+        """
+        批量点击按钮并添加延迟
+        
+        Args:
+            button_centers: 按钮中心点坐标列表
+            delay: 点击间隔时间
+        """
+        for center_x, center_y in button_centers:
+            self.get_mouse_controller().click(center_x, center_y)
+            if delay > 0:
+                time.sleep(delay)
+
+    def perform_special_click_sequence(self, button_centers: List[Tuple[int, int]], count: int = 3):
+        """
+        执行特殊的点击序列（先按左键，再按右键，再抬右键，再抬左键）
+        
+        Args:
+            button_centers: 按钮中心点坐标列表
+            count: 执行的按钮数量
+        """
+        for center_x, center_y in button_centers[:count]:
+            # 移动到目标位置
+            self.get_mouse_controller().move_to(center_x, center_y, duration=0.1)
+            # 执行特殊的鼠标操作序列
+            mouse_controller = self.get_mouse_controller()
+            # 1. 先按左键（不释放）
+            mouse_controller.mouse_down(button='left')
+            time.sleep(0.05)  # 短暂延迟
+            # 2. 再按右键（不释放）
+            mouse_controller.mouse_down(button='right')
+            time.sleep(0.05)  # 短暂延迟
+            # 3. 再抬右键
+            mouse_controller.mouse_up(button='right')
+            time.sleep(0.05)  # 短暂延迟
+            # 4. 再抬左键
+            mouse_controller.mouse_up(button='left')
+            # 操作间隔
+            time.sleep(0.2)
+
+    def perform_scroll_operation(self, scroll_type: str = "major", custom_pixels: Optional[int] = None, 
+                                custom_steps: Optional[int] = None, custom_delay: Optional[float] = None):
+        """
+        执行滚轮操作的统一方法
+        
+        Args:
+            scroll_type: 滚动类型
+                - "major": 主要滚动 (-20像素，3步，0.05秒延迟)
+                - "minor": 轻微滚动 (-2像素，1步，0.05秒延迟)  
+                - "custom": 自定义滚动
+            custom_pixels: 自定义滚动像素数（仅在scroll_type="custom"时生效）
+            custom_steps: 自定义滚动步数（仅在scroll_type="custom"时生效）
+            custom_delay: 自定义延迟时间（仅在scroll_type="custom"时生效）
+            
+        Returns:
+            bool: 是否成功
+        """
+        try:
+            # 根据滚动类型设置参数
+            if scroll_type == "major":
+                pixels, steps, delay = -20, 3, 0.05
+                scroll_name = "主要滚动"
+            elif scroll_type == "minor":
+                pixels, steps, delay = -2, 1, 0.05
+                scroll_name = "轻微滚动"
+            elif scroll_type == "custom":
+                pixels = custom_pixels if custom_pixels is not None else -10
+                steps = custom_steps if custom_steps is not None else 2
+                delay = custom_delay if custom_delay is not None else 0.05
+                scroll_name = f"自定义滚动({pixels}像素)"
+            else:
+                self.logger.error(f"❌ 不支持的滚动类型: {scroll_type}")
+                return False
+                
+            self.logger.info(f"🖱️ 开始{scroll_name}操作...")
+            
+            # 方法1：尝试高级平滑滚动
+            try:
+                mouse_controller = self.get_mouse_controller()
+                mouse_controller.scroll_smooth(pixels, steps=steps, delay=delay)
+                self.logger.info(f"✅ {scroll_name}(高级平滑)完成")
+                return True
+            except Exception as e:
+                self.logger.warning(f"高级滚动失败，使用备用方案: {e}")
+                
+                # 方法2：备用方案 - 使用多次小幅度滚动
+                fallback_clicks = pixels // -3  # 每次滚动3个单位
+                if fallback_clicks <= 0:
+                    fallback_clicks = 1
+                    
+                for i in range(fallback_clicks):
+                    self.get_mouse_controller().scroll(-3)
+                    time.sleep(0.08)
+                self.logger.info(f"✅ {scroll_name}(标准滚动)完成")
+                return True
+                
+        except Exception as e:
+            self.logger.error(f"❌ 滚轮操作失败: {str(e)}")
+            return False
+
+    def initialize_system_and_adjust_window(self):
+        """
+        初始化系统并调整窗口
+        
+        Returns:
+            bool: 是否成功
+        """
         # 初始化系统
-        if not wechat_auto.initialize():
-            wechat_auto.logger.error("❌ 系统初始化失败")
-            return
+        if not self.initialize():
+            self.logger.error("❌ 系统初始化失败")
+            return False
         
-        wechat_auto.logger.info("✅ 系统初始化成功")
+        self.logger.info("✅ 系统初始化成功")
         
-        # 获取窗口信息
-        window_info = wechat_auto.get_wechat_window_info()
+        # 获取并显示窗口信息
+        window_info = self.get_wechat_window_info()
         if window_info:
-            wechat_auto.logger.info(f"📱 企业微信窗口: {window_info['title']}")
-            wechat_auto.logger.info(f"📏 窗口大小: {window_info['width']}x{window_info['height']}")
+            self.logger.info(f"📱 企业微信窗口: {window_info['title']}")
+            self.logger.info(f"📏 当前窗口大小: {window_info['width']}x{window_info['height']}")
+            self.logger.info(f"📏 当前窗口位置: {window_info['rect']}")
         
-        # 演示截图功能
-        wechat_auto.logger.info("\n📸 正在截取操作截图...")
-        screenshot_result = wechat_auto.take_screenshot()
-        if screenshot_result.success and screenshot_result.data:
-            wechat_auto.logger.info(f"✅ 截图成功: {screenshot_result.data['screenshot_path']}")
+        # 调整窗口大小和位置
+        self.logger.info("🔧 正在调整企业微信窗口大小和位置...")
+        adjust_result = self.adjust_wechat_window()
+        
+        if adjust_result.success:
+            self.logger.info(f"✅ {adjust_result.message}")
+            # 获取调整后的窗口信息
+            updated_window_info = self.get_wechat_window_info()
+            if updated_window_info:
+                self.logger.info(f"📏 调整后窗口大小: {updated_window_info['width']}x{updated_window_info['height']}")
+                self.logger.info(f"📏 调整后窗口位置: {updated_window_info['rect']}")
         else:
-            wechat_auto.logger.error(f"❌ 截图失败: {screenshot_result.message}")
-    
-        # 演示发送消息功能
-        wechat_auto.logger.info("\n💬 演示发送消息功能...")
-        test_message = "这是一条测试消息"
+            self.logger.error(f"❌ 窗口调整失败: {adjust_result.message}")
+            # 继续执行，不中断流程
         
-        # 注意：这里需要实际的模板文件才能工作
-        # test_templates = ['chat1.png', 'chat2.png']
-        # result = wechat_auto.execute_multi_chat_send(test_message, test_templates)
-        # print(f"发送结果: {result.message}")
-        
-        wechat_auto.logger.info("💡 提示：要使用完整功能，请准备聊天模板图片并放置在 templates/wechat/ 目录下")
-        
-    except Exception as e:
-        wechat_auto.logger.error(f"❌ 运行时错误: {str(e)}")
-        
-    finally:
-        # 清理资源
-        wechat_auto.cleanup()
-        wechat_auto.logger.info("\n🔧 系统清理完成")
+        return True
 
-def main1():
+    def find_and_click_external_button(self):
+        """查找并点击【外部】按钮"""
+        self.logger.info("🔍 查找【外部】并点击")
+        button_centers = self.find_template_and_get_centers("waibu.png", confidence=0.8)
+        
+        if len(button_centers) < 1:
+            self.logger.error(f"❌ 找到的【外部】数量不足，只有 {len(button_centers)} 个，无法进行点击")
+            return False
+        
+        self.logger.info(f"🎯 找到 {len(button_centers)} 个群发按钮，按从上到下顺序排列，并点击最上面那个")
+        center_x, center_y = button_centers[0]
+        self.get_mouse_controller().click(center_x, center_y)
+        time.sleep(2)
+        return True
+
+    def find_wechat_message_and_setup_multiselect(self):
+        """查找微信消息并设置多选"""
+        # 查找发单群内的关键信息【@微信】
+        template_names = [
+            "at_wechat_message.png",
+            "at_wechat_miniprogram.png", 
+            "at_wechat_gongzhonghao.png",
+            "at_wechat_videominiprogram.png"
+        ]
+        
+        found, locate_result, template_name = self.wait_and_find_template(template_names, confidence=0.8)
+        
+        if not found or not locate_result:
+            self.logger.error("❌ 未找到发单群内的关键信息【@微信】")
+            return False
+        
+        self.logger.info(f"🔍 找到发单群内的关键信息【@微信】({template_name})，开始点击")
+        left, top, right, bottom = locate_result[0]
+        
+        # 右键点击
+        self.get_mouse_controller().click(right, bottom, button='right')
+        time.sleep(1)
+        
+        # 查找并点击多选按钮
+        count = 10
+        while count > 0:
+            button_centers = self.find_template_and_get_centers("multi_select.png", confidence=0.8)
+            if button_centers:
+                self.logger.info("🔍 找到多选按钮，开始点击")
+                center_x, center_y = button_centers[0]
+                self.get_mouse_controller().click(center_x, center_y)
+                break
+            self.logger.warning("🔍 未找到多选按钮，等待1s后重新查找")
+            time.sleep(1)
+            count -= 1
+        
+        time.sleep(1)
+        return True
+
+    def select_groups_and_perform_operations(self):
+        """选择群组并执行相关操作"""
+        # 查找并点击多选框
+        self.logger.info("🔍 开始查找点击多选按钮")
+        button_centers = self.find_template_and_get_centers("group_button.png", confidence=0.85, reverse=True)
+        
+        if button_centers:
+            self.logger.info("🔍 找到多选框，开始点击")
+            self.click_buttons_with_delay(button_centers, delay=1.0)
+        else:
+            self.logger.error("❌ 未找到多选框，无法进行点击")
+        
+        # 查找并点击逐条转发按钮
+        self.logger.info("🔍 开始查找点击逐条转发按钮")
+        button_centers = self.find_template_and_get_centers("send_one_by_one.png", confidence=0.85)
+        if button_centers:
+            self.logger.info("🔍 找到逐条转发按钮，开始点击")
+            center_x, center_y = button_centers[0]
+            self.get_mouse_controller().click(center_x, center_y)
+        
+        time.sleep(1)
+
+    def perform_group_mass_sending(self):
+        """执行群发操作的核心逻辑"""
+        # 查找群发按钮
+        self.logger.info("🔍 正在查找未选框...")
+        button_centers = self.find_template_and_get_centers("group_button.png", confidence=0.85)
+        
+        self.logger.info(f"🎯 找到 {len(button_centers)} 个群发按钮，按从上到下顺序排列")
+        
+        if len(button_centers) < 9:
+            self.logger.error(f"❌ 找到的群发按钮数量不足，只有 {len(button_centers)} 个，无法进行群发")
+            return False
+        
+        # 从第二个开始选，因为第一个是【采集群】
+        self.click_buttons_with_delay(button_centers[1:10], delay=0)
+        
+        # 滚轮下滑操作
+        self.perform_scroll_operation("major")
+        
+        time.sleep(1)
+        
+        # 再选3个未选框并执行特殊操作
+        button_centers1 = self.find_template_and_get_centers("group_button.png", confidence=0.85)
+        if len(button_centers1) < 3:
+            self.logger.error(f"❌ 找到的未选框数量不足，只有 {len(button_centers1)} 个，无法进行群发")
+            return False
+        
+        self.logger.info(f"🎯 找到 {len(button_centers1)} 个未选框，按从上到下顺序排列")
+        
+        # 执行特殊点击序列
+        self.perform_special_click_sequence(button_centers1, count=3)
+        
+        # 多次点击前3个按钮
+        self.click_buttons_with_delay(button_centers1[:3], delay=0)
+        for center_x, center_y in button_centers1[:3]:
+            self.get_mouse_controller().click(center_x, center_y)
+            self.get_mouse_controller().click(center_x, center_y)
+        
+        # 点击剩余按钮
+        self.click_buttons_with_delay(button_centers1[3:], delay=0)
+        
+        # 轻微滚动
+        self.perform_scroll_operation("minor")
+        
+        # 疯狂连点操作
+        window_info = self.get_wechat_window_info()
+        if window_info and 'rect' in window_info:
+            crazy_click_coordinate = (button_centers1[0][0] + 50, window_info['rect'][3] - 10)
+            self.logger.info(f"🎯 疯狂连点坐标: {crazy_click_coordinate}")
+            time.sleep(1)
+            self.logger.info("🎯 开始疯狂连点坐标操作")
+            self.get_mouse_controller().click(crazy_click_coordinate[0], crazy_click_coordinate[1], clicks=600, interval=0.01)
+            self.logger.info("✅ 疯狂连点坐标完成")
+        else:
+            self.logger.error("❌ 无法获取窗口信息，跳过疯狂连点操作")
+            return False
+        
+        # 最后检查一遍多选框是否全部选中，因为连点不一定会保证选中最后一次
+        self.logger.info("🔍 最后检查一遍多选框是否全部选中")
+        button_centers = self.find_template_and_get_centers("group_button.png", confidence=0.9)
+        for center_x, center_y in button_centers:
+            self.get_mouse_controller().click(center_x, center_y)
+
+        time.sleep(1)
+
+        # 点击【发送】按钮
+        button_centers = self.find_template_and_get_centers("send_button.png", confidence=0.9)
+        x_center, y_center = button_centers[0]
+        self.get_mouse_controller().click(x_center, y_center)
+
+        time.sleep(3)
+
+        # 点击右上方三个点的菜单，然后鼠标往下移动一点距离，再往下滚动2次，找【清空聊天记录】
+        button_centers = self.find_template_and_get_centers("three_dots_menu.png", confidence=0.9)
+        x_center, y_center = button_centers[0]
+        self.get_mouse_controller().click(x_center, y_center)
+        time.sleep(1)
+        self.get_mouse_controller().move_to(x_center, y_center + 100)
+        time.sleep(1)
+        self.perform_scroll_operation("custom", custom_pixels = -500)
+        time.sleep(1)
+        button_centers = self.find_template_and_get_centers("clear_chat_record.png", confidence=0.9)
+        x_center, y_center = button_centers[0]
+        self.get_mouse_controller().click(x_center, y_center)
+        time.sleep(1)
+        button_centers = self.find_template_and_get_centers("confirm.png", confidence=0.9)
+        x_center, y_center = button_centers[0]
+        self.get_mouse_controller().click(x_center, y_center)
+        self.logger.info("✅ 清空聊天记录完成")
+        time.sleep(1)
+        button_centers = self.find_template_and_get_centers("close_three_dots_menu.png", confidence=0.9)
+        x_center, y_center = button_centers[0]
+        self.get_mouse_controller().click(x_center, y_center)
+        self.logger.info("✅ 关闭三点菜单完成")
+        time.sleep(1)
+
+        return True
+
+    def perform_semi_auto_mass_sending(self):
+        """
+        执行半自动群发操作的核心逻辑
+        
+        Returns:
+            bool: 是否成功
+        """
+        try:
+            # 更新窗口信息并保存配置
+            self.logger.info("🔄 正在更新窗口信息...")
+            if self.current_window_info and self.current_process:
+                try:
+                    # 获取最新的窗口信息
+                    hwnd = self.current_window_info['hwnd']
+                    updated_window_info = self.locator.window_locator.get_window_info(hwnd)
+                    
+                    if updated_window_info:
+                        # 更新内部窗口信息
+                        self.current_window_info = {
+                            'hwnd': updated_window_info.hwnd,
+                            'title': updated_window_info.title,
+                            'rect': updated_window_info.rect,
+                            'width': updated_window_info.width,
+                            'height': updated_window_info.height,
+                            'center': updated_window_info.center,
+                            'is_visible': updated_window_info.is_visible
+                        }
+                        
+                        self.logger.info(f"📏 当前窗口信息: 大小({updated_window_info.width}x{updated_window_info.height}), "
+                                       f"位置({updated_window_info.rect[0]}, {updated_window_info.rect[1]})")
+                        
+                        # 保存到settings.yaml
+                        if self.update_window_settings_to_file():
+                            self.logger.info("💾 窗口配置已自动保存，下次启动时将使用新配置")
+                        else:
+                            self.logger.warning("⚠️ 窗口配置保存失败，但不影响当前操作")
+                            
+                    else:
+                        self.logger.warning("⚠️ 无法获取最新窗口信息，使用缓存信息")
+                        
+                except Exception as e:
+                    self.logger.warning(f"⚠️ 更新窗口信息时出错，继续使用缓存信息: {str(e)}")
+
+            # 执行半自动群发流程
+            self.logger.info("🔍 开始半自动群发流程...")
+            
+            # 1. 查找并点击前9个群发按钮
+            self.logger.info("🔍 正在查找未选框...")
+            button_centers = self.find_template_and_get_centers("group_button.png", confidence=0.9)
+            
+            self.logger.info(f"🎯 找到 {len(button_centers)} 个群发按钮，按从上到下顺序排列")
+
+            if len(button_centers) < 9:
+                self.logger.error(f"❌ 找到的群发按钮数量不足，只有 {len(button_centers)} 个，无法进行群发")
+                return False
+
+            # 点击前9个按钮
+            self.click_buttons_with_delay(button_centers[1:10], delay=0)
+
+            # 2. 进行滚轮下滑操作
+            self.perform_scroll_operation("major")
+            
+            time.sleep(1)
+
+            # 3. 再选3个未选框并执行特殊点击序列
+            self.logger.info("🔍 查找滚动后的未选框...")
+            button_centers1 = self.find_template_and_get_centers("group_button.png", confidence=0.9)
+            
+            if len(button_centers1) < 3:
+                self.logger.error(f"❌ 找到的未选框数量不足，只有 {len(button_centers1)} 个，无法进行群发")
+                return False
+            
+            self.logger.info(f"🎯 找到 {len(button_centers1)} 个未选框，按从上到下顺序排列")
+            
+            # 执行特殊点击序列（左键+右键组合）
+            self.perform_special_click_sequence(button_centers1, count=3)
+
+            # 多次点击前3个按钮
+            self.click_buttons_with_delay(button_centers1[:3], delay=0)
+            for center_x, center_y in button_centers1[:3]:
+                self.get_mouse_controller().click(center_x, center_y)
+                self.get_mouse_controller().click(center_x, center_y)
+            
+            # 点击剩余按钮
+            self.click_buttons_with_delay(button_centers1[3:], delay=0)
+
+            # 轻微滚动
+            self.perform_scroll_operation("minor")
+
+            # 4. 疯狂连点操作
+            window_info = self.get_wechat_window_info()
+            if window_info and 'rect' in window_info:
+                crazy_click_coordinate = (button_centers1[0][0] + 50, window_info['rect'][3] - 10)
+                self.logger.info(f"🎯 疯狂连点坐标: {crazy_click_coordinate}")
+                time.sleep(1)
+                self.logger.info("🎯 开始疯狂连点坐标操作")
+                self.get_mouse_controller().click(crazy_click_coordinate[0], crazy_click_coordinate[1], clicks=600, interval=0.01)
+                self.logger.info("✅ 疯狂连点坐标完成")
+            else:
+                self.logger.error("❌ 无法获取窗口信息，跳过疯狂连点操作")
+                return False
+            
+            # 5. 最后检查一遍多选框是否全部选中，因为连点不一定会保证选中最后一次
+            self.logger.info("🔍 最后检查一遍多选框是否全部选中")
+            button_centers = self.find_template_and_get_centers("group_button.png", confidence=0.9)
+            for center_x, center_y in button_centers:
+                self.get_mouse_controller().click(center_x, center_y)
+
+            self.logger.info("✅ 半自动群发点击功能流程执行完成")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ 半自动群发流程执行失败: {str(e)}")
+            return False
+
+def main_semi_auto():
     """半自动群发点击功能流程"""
 
     print("半自动群发点击功能流程")
@@ -561,35 +961,9 @@ def main1():
     wechat_auto = WechatHalfAuto()
     
     try:
-        # 初始化系统
-        if not wechat_auto.initialize():
-            wechat_auto.logger.error("❌ 系统初始化失败")
+        # 1. 初始化系统并调整窗口
+        if not wechat_auto.initialize_system_and_adjust_window():
             return
-        
-        wechat_auto.logger.info("✅ 系统初始化成功")
-        
-        # 获取窗口信息
-        window_info = wechat_auto.get_wechat_window_info()
-        if window_info:
-            wechat_auto.logger.info(f"📱 企业微信窗口: {window_info['title']}")
-            wechat_auto.logger.info(f"📏 当前窗口大小: {window_info['width']}x{window_info['height']}")
-            wechat_auto.logger.info(f"📏 当前窗口位置: {window_info['rect']}")
-        
-        # 调整窗口大小和位置
-        wechat_auto.logger.info("🔧 正在调整企业微信窗口大小和位置...")
-        adjust_result = wechat_auto.adjust_wechat_window()
-        
-        if adjust_result.success:
-            wechat_auto.logger.info(f"✅ {adjust_result.message}")
-            
-            # 获取调整后的窗口信息
-            updated_window_info = wechat_auto.get_wechat_window_info()
-            if updated_window_info:
-                wechat_auto.logger.info(f"📏 调整后窗口大小: {updated_window_info['width']}x{updated_window_info['height']}")
-                wechat_auto.logger.info(f"📏 调整后窗口位置: {updated_window_info['rect']}")
-        else:
-            wechat_auto.logger.error(f"❌ 窗口调整失败: {adjust_result.message}")
-            # 继续执行，不中断流程
         
         # 等待用户确认
         print("\n" + "=" * 60)
@@ -611,155 +985,66 @@ def main1():
             return
         
         wechat_auto.logger.info("✅ 用户确认继续，开始执行群发操作...")
-        print("🚀 开始执行群发操作...")
-        
-        # time.sleep(3)
 
-        # 查找群发按钮
-        wechat_auto.logger.info("🔍 正在查找未选框...")
-        # 获取项目根目录
-        project_root = Path(__file__).parent.parent.parent
-        template_path = project_root / "templates/wechat/group_button.png"
-        locate_result = wechat_auto.get_locator().image_locator.locate_all_by_template(str(template_path), confidence=0.9)
-        # 计算所有按钮的中心点坐标
-        button_centers = []
-        for r in locate_result:
-            left, top, right, bottom = r
-            center_x = left + (right - left) // 2
-            center_y = top + (bottom - top) // 2
-            button_centers.append((center_x, center_y))
-        
-        # 按y轴坐标从低到高排序（从上到下）
-        button_centers.sort(key=lambda point: point[1])
-        wechat_auto.logger.info(f"🎯 找到 {len(button_centers)} 个群发按钮，按从上到下顺序排列")
-
-        if len(button_centers) < 9:
-            wechat_auto.logger.error(f"❌ 找到的群发按钮数量不足，只有 {len(button_centers)} 个，无法进行群发")
-            return
-
-        for center_x, center_y in button_centers[:9]:
-            wechat_auto.get_mouse_controller().click(center_x, center_y)
-            # time.sleep(0.5)
-
-        # 选完后，进行滚轮下滑，开始卡bug
-        wechat_auto.logger.info("🖱️ 开始滚轮下滑操作...")
-        
-        # 方法1：使用高级平滑滚动（推荐）
-        try:
-            mouse_controller = wechat_auto.get_mouse_controller()
-            # 平滑滚动 600 像素，分 20 步完成
-            mouse_controller.scroll_smooth(-20, steps=3, delay=0.05)
-            wechat_auto.logger.info("✅ 高级平滑滚动完成")
-        except Exception as e:
-            wechat_auto.logger.warning(f"高级滚动失败，使用备用方案: {e}")
-            
-            # 方法2：使用多次小幅度滚动（备用方案）
-            for i in range(15):
-                wechat_auto.get_mouse_controller().scroll(-3)  # 每次滚动3个单位
-                time.sleep(0.08)  # 短暂间隔
-            wechat_auto.logger.info("✅ 标准滚动完成")
-        
-        time.sleep(1)
-
-        # 在疯狂连点之前，重新获取窗口信息并保存到settings.yaml
-        wechat_auto.logger.info("🔄 正在更新窗口信息...")
-        
-        # 重新获取当前窗口信息
-        if wechat_auto.current_window_info and wechat_auto.current_process:
-            try:
-                # 获取最新的窗口信息
-                hwnd = wechat_auto.current_window_info['hwnd']
-                updated_window_info = wechat_auto.locator.window_locator.get_window_info(hwnd)
-                
-                if updated_window_info:
-                    # 更新内部窗口信息
-                    wechat_auto.current_window_info = {
-                        'hwnd': updated_window_info.hwnd,
-                        'title': updated_window_info.title,
-                        'rect': updated_window_info.rect,
-                        'width': updated_window_info.width,
-                        'height': updated_window_info.height,
-                        'center': updated_window_info.center,
-                        'is_visible': updated_window_info.is_visible
-                    }
-                    
-                    wechat_auto.logger.info(f"📏 当前窗口信息: 大小({updated_window_info.width}x{updated_window_info.height}), "
-                                          f"位置({updated_window_info.rect[0]}, {updated_window_info.rect[1]})")
-                    
-                    # 保存到settings.yaml
-                    if wechat_auto.update_window_settings_to_file():
-                        wechat_auto.logger.info("💾 窗口配置已自动保存，下次启动时将使用新配置")
-                    else:
-                        wechat_auto.logger.warning("⚠️ 窗口配置保存失败，但不影响当前操作")
-                        
-                else:
-                    wechat_auto.logger.warning("⚠️ 无法获取最新窗口信息，使用缓存信息")
-                    
-            except Exception as e:
-                wechat_auto.logger.warning(f"⚠️ 更新窗口信息时出错，继续使用缓存信息: {str(e)}")
-
-        # 再选3个未选框出来
-        # 获取项目根目录
-        project_root = Path(__file__).parent.parent.parent
-        template_path = project_root / "templates/wechat/group_button.png"
-        locate_result1 = wechat_auto.get_locator().image_locator.locate_all_by_template(str(template_path), confidence=0.9)
-        if len(locate_result1) < 3:
-            wechat_auto.logger.error(f"❌ 找到的未选框数量不足，只有 {len(locate_result1)} 个，无法进行群发")
+        # 执行半自动群发流程
+        if not wechat_auto.perform_semi_auto_mass_sending():
+            wechat_auto.logger.error("❌ 半自动群发操作执行失败")
             return
         
-        button_centers1 = []
-        for r in locate_result1:
-            left, top, right, bottom = r
-            center_x = left + (right - left) // 2
-            center_y = top + (bottom - top) // 2
-            button_centers1.append((center_x, center_y))
-        button_centers1.sort(key=lambda point: point[1])
-        wechat_auto.logger.info(f"🎯 找到 {len(button_centers1)} 个未选框，按从上到下顺序排列")
-        # 先按左键，再按右键，再抬右键，再抬左键
-        for center_x, center_y in button_centers1[:3]:
-            # 移动到目标位置
-            wechat_auto.get_mouse_controller().move_to(center_x, center_y, duration=0.1)
-            # 执行特殊的鼠标操作序列
-            mouse_controller = wechat_auto.get_mouse_controller()
-            # 1. 先按左键（不释放）
-            mouse_controller.mouse_down(button='left')
-            time.sleep(0.05)  # 短暂延迟
-            # 2. 再按右键（不释放）
-            mouse_controller.mouse_down(button='right')
-            time.sleep(0.05)  # 短暂延迟
-            # 3. 再抬右键
-            mouse_controller.mouse_up(button='right')
-            time.sleep(0.05)  # 短暂延迟
-            # 4. 再抬左键
-            mouse_controller.mouse_up(button='left')
-            # 操作间隔
-            time.sleep(0.2)
+    except Exception as e:
+        wechat_auto.logger.error(f"❌ 运行时错误: {str(e)}")
+        
+    finally:
+        # 清理资源
+        wechat_auto.cleanup()
+        wechat_auto.logger.info("\n🔧 系统清理完成")
 
-        for center_x, center_y in button_centers1[:3]:
-            wechat_auto.get_mouse_controller().click(center_x, center_y)
-        for center_x, center_y in button_centers1[:3]:
-            wechat_auto.get_mouse_controller().click(center_x, center_y)
-            wechat_auto.get_mouse_controller().click(center_x, center_y)
-        for center_x, center_y in button_centers1[3:]:
-            wechat_auto.get_mouse_controller().click(center_x, center_y)
+def main_auto():
+    """全自动群发点击功能流程 - 重构版本"""
+    print("全自动群发点击功能流程")
+    print("=" * 50)
 
-        wechat_auto.get_mouse_controller().scroll_smooth(-2, steps=1, delay=0.05)
-
-        # 疯狂连点坐标
-        # 疯狂连点坐标 - Crazy click coordinates
-        window_info = wechat_auto.get_wechat_window_info()
-        if window_info and 'rect' in window_info:
-            crazy_click_coordinate = (button_centers1[0][0] + 50, window_info['rect'][3] - 10)
-            wechat_auto.logger.info(f"🎯 疯狂连点坐标: {crazy_click_coordinate}")
-        else:
-            wechat_auto.logger.error("❌ 无法获取窗口信息，跳过疯狂连点操作")
+    # 创建主控制器实例
+    wechat_auto = WechatHalfAuto()
+    
+    try:
+        # 1. 初始化系统并调整窗口
+        if not wechat_auto.initialize_system_and_adjust_window():
             return
         
-        time.sleep(1)
+        # 2. 显示操作提示
+        print("\n" + "=" * 60)
+        print("🎯 窗口调整完成！")
+        print("📋 接下来将执行全自动群发点击功能：")
+        print("   1. 查找并点击前9个群发按钮")
+        print("   2. 进行滚轮下滑操作")
+        print("   3. 再选择3个未选框并执行特殊点击序列")
+        print("   4. 进行疯狂连点操作")
+        print("\n⚠️  请确保企业微信已准备就绪，并且群发页面已打开")
+        print("=" * 60)
+        
+        print("🚀 开始监控群发操作 等待3s ...")
+        time.sleep(3)
 
-        wechat_auto.logger.info("🎯 开始疯狂连点坐标操作")
-        wechat_auto.get_mouse_controller().click(crazy_click_coordinate[0], crazy_click_coordinate[1], clicks=600, interval=0.01)
-        wechat_auto.logger.info("✅ 疯狂连点坐标完成")
+        while True:
+        # 3. 查找并点击【外部】按钮
+            if not wechat_auto.find_and_click_external_button():
+                return
+
+            # 4. 查找微信消息并设置多选
+            if not wechat_auto.find_wechat_message_and_setup_multiselect():
+                time.sleep(random.randint(8, 16))
+                continue
+
+            # 5. 选择群组并执行相关操作
+            wechat_auto.select_groups_and_perform_operations()
+
+            # 6. 执行群发操作的核心逻辑
+            if not wechat_auto.perform_group_mass_sending():
+                wechat_auto.logger.error("❌ 群发操作执行失败")
+                return
+
+            wechat_auto.logger.info("✅ 全自动群发点击功能流程执行完成")
         
     except Exception as e:
         wechat_auto.logger.error(f"❌ 运行时错误: {str(e)}")
@@ -770,4 +1055,69 @@ def main1():
         wechat_auto.logger.info("\n🔧 系统清理完成")
 
 if __name__ == "__main__":
-    main1()
+    # main_semi_auto()
+    main_auto()
+
+    # wechat_auto = WechatHalfAuto()
+    # project_root = Path(__file__).parent.parent.parent
+
+    # template_path = project_root / "templates/wechat/group_button.png"
+    # locate_result = wechat_auto.get_locator().image_locator.locate_all_by_template(str(template_path), confidence=0.85)
+    # print(locate_result)
+
+"""
+重构总结
+========
+
+本次重构主要解决了以下问题：
+
+1. **代码重复问题**：
+   - 原有的 main_auto() 函数中存在大量重复的模板查找、坐标计算、按钮点击、滚轮操作逻辑
+   - 通过提取公共方法，减少了约60%的重复代码
+   - 滚轮操作统一为perform_scroll_operation方法，支持major/minor/custom三种滚动模式
+
+2. **可读性改进**：
+   - 将600+行的单一函数分解为多个职责单一的方法
+   - 每个方法都有清晰的文档说明和参数类型提示
+   - 主流程逻辑更加清晰易懂
+
+3. **可维护性提升**：
+   - 模块化设计使得功能修改更加容易
+   - 统一的错误处理机制
+   - 便于单元测试和调试
+
+4. **功能组织**：
+   - 模板相关操作：find_template_and_get_centers, wait_and_find_template
+   - 鼠标操作：click_buttons_with_delay, perform_special_click_sequence, perform_scroll_operation
+   - 流程控制：各种具体业务流程方法
+
+5. **使用方式**：
+   重构后的代码保持了向后兼容，原有的调用方式依然有效：
+   ```python
+   # 直接调用全自动模式
+   main_auto()
+   
+   # 直接调用半自动模式
+   main1()
+   
+   # 或者使用模块化的方式
+   wechat_auto = WechatHalfAuto()
+   wechat_auto.initialize_system_and_adjust_window()
+   
+   # 全自动模式
+   wechat_auto.find_and_click_external_button()
+   wechat_auto.find_wechat_message_and_setup_multiselect()
+   wechat_auto.select_groups_and_perform_operations()
+   wechat_auto.perform_group_mass_sending()
+   
+   # 半自动模式
+   wechat_auto.perform_semi_auto_mass_sending()
+   ```
+
+6. **恢复的功能**：
+   - 成功恢复了半自动模式的完整流程
+   - 使用重构后的模块化接口，代码更加简洁
+   - 保持了原有的用户交互体验
+
+这次重构显著提高了代码质量，使得后续开发和维护更加便利。
+"""

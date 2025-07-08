@@ -8,10 +8,8 @@ import win32gui
 import win32process
 from typing import List, Optional, Tuple
 from dataclasses import dataclass
-import logging
 import time
-
-logger = logging.getLogger(__name__)
+from core.utils import logger
 
 
 @dataclass
@@ -35,13 +33,14 @@ class WechatProcessDetector:
         Args:
             process_names: 企业微信进程名称列表，默认为常见的企业微信进程名
         """
+        self.logger = logger
         self.process_names = process_names or [
             "WXWork.exe", 
             "企业微信.exe", 
             "WeChatWork.exe",
             "wxwork.exe"
         ]
-        logger.info(f"初始化企业微信进程检测器，监控进程: {self.process_names}")
+        self.logger.info(f"初始化企业微信进程检测器，监控进程: {self.process_names}")
     
     def find_wechat_processes(self) -> List[ProcessInfo]:
         """
@@ -66,21 +65,21 @@ class WechatProcessDetector:
                             create_time=proc_info['create_time'] or 0.0
                         )
                         wechat_processes.append(process_info)
-                        logger.debug(f"找到企业微信进程: PID={process_info.pid}, 名称={process_info.name}")
+                        self.logger.debug(f"找到企业微信进程: PID={process_info.pid}, 名称={process_info.name}")
                 
                 except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess) as e:
                     # 忽略无法访问的进程
                     continue
                     
         except Exception as e:
-            logger.error(f"枚举进程时发生错误: {e}")
+            self.logger.error(f"枚举进程时发生错误: {e}")
             
-        logger.info(f"共找到 {len(wechat_processes)} 个企业微信进程")
+        self.logger.info(f"共找到 {len(wechat_processes)} 个企业微信进程")
         return wechat_processes
     
     def get_main_wechat_process(self) -> Optional[ProcessInfo]:
         """
-        获取主要的企业微信进程（通常是内存使用最大的）
+        获取主要的企业微信进程（通过窗口面积最大来判断）
         
         Returns:
             Optional[ProcessInfo]: 主要的企业微信进程信息，如果没有找到则返回None
@@ -88,14 +87,45 @@ class WechatProcessDetector:
         processes = self.find_wechat_processes()
         
         if not processes:
-            logger.warning("未找到任何企业微信进程")
+            self.logger.warning("未找到任何企业微信进程")
             return None
             
-        # 选择内存使用最大的进程作为主进程
-        main_process = max(processes, key=lambda p: p.memory_usage)
-        logger.info(f"选择主要企业微信进程: PID={main_process.pid}, 内存使用={main_process.memory_usage // 1024 // 1024}MB")
+        # 如果只有一个进程，直接返回
+        if len(processes) == 1:
+            self.logger.info(f"找到唯一企业微信进程: PID={processes[0].pid}")
+            return processes[0]
+            
+        # 通过窗口面积来选择主进程
+        main_process = None
+        max_window_area = 0
         
-        return main_process
+        for process in processes:
+            hwnd = self.get_process_window_handle(process.pid)
+            if hwnd:
+                try:
+                    rect = win32gui.GetWindowRect(hwnd)
+                    width = rect[2] - rect[0]
+                    height = rect[3] - rect[1]
+                    area = width * height
+                    
+                    self.logger.debug(f"进程 {process.pid} 窗口面积: {area} ({width}x{height})")
+                    
+                    if area > max_window_area:
+                        max_window_area = area
+                        main_process = process
+                        
+                except Exception as e:
+                    self.logger.warning(f"获取进程 {process.pid} 窗口尺寸失败: {e}")
+                    continue
+        
+        if main_process:
+            self.logger.info(f"选择主要企业微信进程: PID={main_process.pid}, 窗口面积={max_window_area}")
+            return main_process
+        else:
+            # 如果无法获取窗口信息，回退到内存使用量最大的进程
+            main_process = max(processes, key=lambda p: p.memory_usage)
+            self.logger.warning(f"无法获取窗口信息，回退到内存使用最大的进程: PID={main_process.pid}")
+            return main_process
     
     def is_wechat_running(self) -> bool:
         """
@@ -106,7 +136,7 @@ class WechatProcessDetector:
         """
         processes = self.find_wechat_processes()
         is_running = len(processes) > 0
-        logger.debug(f"企业微信运行状态: {is_running}")
+        self.logger.debug(f"企业微信运行状态: {is_running}")
         return is_running
     
     def get_process_window_handle(self, pid: int) -> Optional[int]:
@@ -144,7 +174,7 @@ class WechatProcessDetector:
             win32gui.EnumWindows(enum_windows_callback, windows)
             
             if not windows:
-                logger.warning(f"未找到进程 {pid} 对应的可见窗口")
+                self.logger.warning(f"未找到进程 {pid} 对应的可见窗口")
                 return None
             
             # 优先选择主窗口的策略：
@@ -162,7 +192,7 @@ class WechatProcessDetector:
             if main_windows:
                 # 选择最大的WeWorkWindow窗口
                 best_window = max(main_windows, key=lambda w: w['width'] * w['height'])
-                logger.info(f"找到进程 {pid} 的主窗口句柄: {best_window['hwnd']}, 标题: {best_window['title']}")
+                self.logger.info(f"找到进程 {pid} 的主窗口句柄: {best_window['hwnd']}, 标题: {best_window['title']}")
                 return best_window['hwnd']
             
             # 策略2：查找有标题且大小合理的窗口
@@ -175,19 +205,19 @@ class WechatProcessDetector:
             if main_windows:
                 # 选择最大的窗口
                 best_window = max(main_windows, key=lambda w: w['width'] * w['height'])
-                logger.info(f"找到进程 {pid} 的窗口句柄: {best_window['hwnd']}, 标题: {best_window['title']}")
+                self.logger.info(f"找到进程 {pid} 的窗口句柄: {best_window['hwnd']}, 标题: {best_window['title']}")
                 return best_window['hwnd']
             
             # 策略3：选择最大的窗口（兜底策略）
             if windows:
                 best_window = max(windows, key=lambda w: w['width'] * w['height'])
-                logger.warning(f"未找到明确的主窗口，选择最大窗口: {best_window['hwnd']}, 标题: {best_window['title']}, 大小: {best_window['width']}x{best_window['height']}")
+                self.logger.warning(f"未找到明确的主窗口，选择最大窗口: {best_window['hwnd']}, 标题: {best_window['title']}, 大小: {best_window['width']}x{best_window['height']}")
                 return best_window['hwnd']
             
             return None
                 
         except Exception as e:
-            logger.error(f"获取进程 {pid} 窗口句柄时发生错误: {e}")
+            self.logger.error(f"获取进程 {pid} 窗口句柄时发生错误: {e}")
             return None
     
     def get_wechat_window_handle(self) -> Optional[int]:
@@ -213,16 +243,16 @@ class WechatProcessDetector:
         Returns:
             Optional[ProcessInfo]: 企业微信进程信息，如果超时则返回None
         """
-        logger.info(f"等待企业微信启动，超时时间: {timeout}秒")
+        self.logger.info(f"等待企业微信启动，超时时间: {timeout}秒")
         start_time = time.time()
         
         while time.time() - start_time < timeout:
             main_process = self.get_main_wechat_process()
             if main_process:
-                logger.info(f"企业微信已启动，等待时间: {time.time() - start_time:.2f}秒")
+                self.logger.info(f"企业微信已启动，等待时间: {time.time() - start_time:.2f}秒")
                 return main_process
             
             time.sleep(1.0)
         
-        logger.warning(f"等待企业微信启动超时 ({timeout}秒)")
+        self.logger.warning(f"等待企业微信启动超时 ({timeout}秒)")
         return None 

@@ -262,7 +262,7 @@ class ImageLocator(Locator):
                              confidence: Optional[float] = None,
                              region: Optional[Tuple[int, int, int, int]] = None,
                              grayscale: Optional[bool] = None,
-                             max_results: int = 10) -> List[Tuple[int, int, int, int]]:
+                             max_results: int = 30) -> List[Tuple[int, int, int, int]]:
         """
         通过模板匹配定位所有匹配的元素
         

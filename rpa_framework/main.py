@@ -18,7 +18,7 @@ from core.locator import CoordinateLocator, ImageLocator, WindowLocator, locator
 from core.mouse import MouseController
 from core.keyboard import KeyboardController, LanguageType
 from core.waiter import WaitController
-from workflows.wechat.wechat_half_auto import main1 as wechat_main1
+from workflows.wechat.wechat_half_auto import main_semi_auto, main_auto
 
 class RpaFramework:
     """RPA框架主类"""
@@ -347,22 +347,15 @@ def main():
         # 显示菜单
         while rpa.running:
             print("\\n" + "=" * 40)
-            print("RPA框架测试菜单")
+            print("RPA框架菜单")
             print("=" * 40)
-            print("1. 运行完整演示")
-            print("2. 基本操作演示")
-            print("3. 图像识别演示")
-            print("4. 窗口操作演示")
-            print("5. 等待操作演示")
-            print("6. IME输入法控制测试")
-            print("7. 查看当前鼠标位置")
-            print("8. 截取屏幕截图")
-            print("9. 企业微信半自动化群发")
+            print("1. 企业微信半自动化群发")
+            print("2. 企业微信全自动化群发")
             print("0. 退出")
             print("=" * 40)
             
             try:
-                choice = input("请选择操作 (0-9): ").strip()
+                choice = input("请选择操作 (0-2): ").strip()
             except (EOFError, KeyboardInterrupt):
                 print("\\n程序被用户中断")
                 break
@@ -371,30 +364,11 @@ def main():
                 print("退出程序")
                 break
             elif choice == '1':
-                rpa.run_full_demo()
-            elif choice == '2':
-                rpa.demo_basic_operations()
-            elif choice == '3':
-                rpa.demo_image_recognition()
-            elif choice == '4':
-                rpa.demo_window_operations()
-            elif choice == '5':
-                rpa.demo_wait_operations()
-            elif choice == '6':
-                rpa.demo_ime_control()
-            elif choice == '7':
-                pos = rpa.mouse.get_position()
-                print(f"当前鼠标位置: {pos}")
-            elif choice == '8':
-                filename = f"screenshot_{int(time.time())}.png"
-                rpa.screen_capture.screenshot(filename=filename)
-                print(f"截图已保存: {filename}")
-            elif choice == '9':
                 print("启动企业微信半自动化群发功能...")
-                try:
-                    wechat_main1()
-                except Exception as e:
-                    print(f"企业微信半自动化功能执行失败: {e}")
+                main_semi_auto()
+            elif choice == '2':
+                print("启动企业微信全自动化群发功能...")
+                main_auto()
             else:
                 print("无效选择，请重新输入")
     
