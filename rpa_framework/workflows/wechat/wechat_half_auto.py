@@ -625,6 +625,64 @@ class WechatHalfAuto:
             self.logger.error(f"❌ 滚轮操作失败: {str(e)}")
             return False
 
+    def perform_multi_group_crazy_click(self, x: int, y: int) -> bool:
+        """
+        执行多组疯狂连点操作
+        
+        Args:
+            x: 点击X坐标
+            y: 点击Y坐标
+            
+        Returns:
+            bool: 是否成功
+        """
+        try:
+            # 从全局配置中获取疯狂连点配置
+            from config.settings import get_settings
+            settings = get_settings()
+            
+            # 验证配置有效性
+            if not settings.validate_crazy_click_settings():
+                self.logger.error("❌ 疯狂连点配置无效，使用默认参数")
+                # 使用默认配置
+                click_config = {
+                    "clicks_per_group": 100,
+                    "group_interval": 2.0,
+                    "total_groups": 6,
+                    "click_interval": 0.01
+                }
+            else:
+                click_config = settings.get_crazy_click_config()
+            
+            self.logger.info(f"🎯 开始多组疯狂连点操作:")
+            self.logger.info(f"   📊 配置参数: {click_config['total_groups']}组, 每组{click_config['clicks_per_group']}次, 组间隔{click_config['group_interval']}s")
+            self.logger.info(f"   🎯 点击坐标: ({x}, {y})")
+            
+            # 执行多组连点
+            for group_num in range(click_config['total_groups']):
+                self.logger.info(f"🎯 执行第 {group_num + 1}/{click_config['total_groups']} 组连点...")
+                
+                # 执行一组连点
+                self.get_mouse_controller().click(
+                    x, y, 
+                    clicks=click_config['clicks_per_group'],
+                    interval=click_config['click_interval']
+                )
+                
+                self.logger.info(f"✅ 第 {group_num + 1} 组连点完成 ({click_config['clicks_per_group']}次)")
+                
+                # 组间间隔（最后一组不需要等待）
+                if group_num < click_config['total_groups'] - 1:
+                    self.logger.info(f"⏱️ 组间间隔等待 {click_config['group_interval']}s...")
+                    time.sleep(click_config['group_interval'])
+            
+            self.logger.info(f"✅ 多组疯狂连点操作完成 (总计: {click_config['total_groups'] * click_config['clicks_per_group']}次)")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ 多组疯狂连点操作失败: {str(e)}")
+            return False
+
     def initialize_system_and_adjust_window(self):
         """
         初始化系统并调整窗口
@@ -788,9 +846,9 @@ class WechatHalfAuto:
             crazy_click_coordinate = (button_centers1[0][0] + 50, window_info['rect'][3] - 10)
             self.logger.info(f"🎯 疯狂连点坐标: {crazy_click_coordinate}")
             time.sleep(1)
-            self.logger.info("🎯 开始疯狂连点坐标操作")
-            self.get_mouse_controller().click(crazy_click_coordinate[0], crazy_click_coordinate[1], clicks=600, interval=0.01)
-            self.logger.info("✅ 疯狂连点坐标完成")
+            # 使用新的多组连点方法
+            if not self.perform_multi_group_crazy_click(crazy_click_coordinate[0], crazy_click_coordinate[1]):
+                return False
         else:
             self.logger.error("❌ 无法获取窗口信息，跳过疯狂连点操作")
             return False
@@ -931,9 +989,9 @@ class WechatHalfAuto:
                 crazy_click_coordinate = (button_centers1[0][0] + 50, window_info['rect'][3] - 10)
                 self.logger.info(f"🎯 疯狂连点坐标: {crazy_click_coordinate}")
                 time.sleep(1)
-                self.logger.info("🎯 开始疯狂连点坐标操作")
-                self.get_mouse_controller().click(crazy_click_coordinate[0], crazy_click_coordinate[1], clicks=600, interval=0.01)
-                self.logger.info("✅ 疯狂连点坐标完成")
+                # 使用新的多组连点方法
+                if not self.perform_multi_group_crazy_click(crazy_click_coordinate[0], crazy_click_coordinate[1]):
+                    return False
             else:
                 self.logger.error("❌ 无法获取窗口信息，跳过疯狂连点操作")
                 return False

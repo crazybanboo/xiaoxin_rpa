@@ -23,8 +23,13 @@ mouse:
 # 企业微信窗口设置
 wechat:
   window_size:
-    width: 1480
-    height: 1108
+    width: 2019
+    height: 1485
   window_position:
-    x: 100
-    y: 100
+    x: 99
+    y: 99
+  crazy_click_settings:
+    clicks_per_group: 600
+    group_interval: 2.0
+    total_groups: 6
+    click_interval: 0.01

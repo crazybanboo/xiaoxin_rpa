@@ -97,6 +97,13 @@ class WechatSettings:
     # 窗口配置
     window_size: Dict[str, int] = field(default_factory=lambda: {"width": 1200, "height": 800})
     window_position: Dict[str, int] = field(default_factory=lambda: {"x": 100, "y": 100})
+    # 疯狂连点配置
+    crazy_click_settings: Dict[str, Any] = field(default_factory=lambda: {
+        "clicks_per_group": 100,     # 每组连点次数
+        "group_interval": 2.0,       # 组间隔时间（秒）
+        "total_groups": 6,           # 总组数
+        "click_interval": 0.01       # 单次点击间隔
+    })
 
 class Settings:
     """RPA框架配置管理器"""
@@ -334,6 +341,49 @@ class Settings:
             "window_size": self.wechat.window_size,
             "window_position": self.wechat.window_position
         }
+
+    def get_crazy_click_config(self) -> Dict[str, Any]:
+        """
+        获取疯狂连点配置
+        
+        Returns:
+            Dict: 疯狂连点配置字典
+        """
+        return self.wechat.crazy_click_settings
+
+    def validate_crazy_click_settings(self) -> bool:
+        """
+        验证疯狂连点配置的有效性
+        
+        Returns:
+            bool: 配置是否有效
+        """
+        errors = []
+        config = self.wechat.crazy_click_settings
+        
+        # 验证每组连点次数
+        if config.get('clicks_per_group', 0) <= 0:
+            errors.append("clicks_per_group 必须大于 0")
+        
+        # 验证组间隔时间
+        if config.get('group_interval', 0) < 0:
+            errors.append("group_interval 不能为负数")
+        
+        # 验证总组数
+        if config.get('total_groups', 0) <= 0:
+            errors.append("total_groups 必须大于 0")
+        
+        # 验证单次点击间隔
+        if config.get('click_interval', 0) < 0:
+            errors.append("click_interval 不能为负数")
+        
+        if errors:
+            print("疯狂连点配置验证失败:")
+            for error in errors:
+                print(f"  - {error}")
+            return False
+        
+        return True
 
 
 # 全局配置实例
