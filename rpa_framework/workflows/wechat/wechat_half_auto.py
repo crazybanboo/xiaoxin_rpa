@@ -515,7 +515,7 @@ class WechatHalfAuto:
         while wait_time < max_wait_time:
             for template_name in template_names:
                 template_path = project_root / f"templates/wechat/{template_name}"
-                locate_result = self.get_locator().image_locator.locate_all_by_template(str(template_path), confidence=confidence)
+                locate_result = self.get_locator().image_locator.locate_all_by_template(str(template_path), confidence=confidence, grayscale=False)
                 if locate_result:
                     return True, locate_result, template_name
             
@@ -746,7 +746,7 @@ class WechatHalfAuto:
             "at_wechat_videominiprogram.png"
         ]
         
-        found, locate_result, template_name = self.wait_and_find_template(template_names, confidence=0.8)
+        found, locate_result, template_name = self.wait_and_find_template(template_names, confidence=0.9)
         
         if not found or not locate_result:
             self.logger.error("❌ 未找到发单群内的关键信息【@微信】")
@@ -754,7 +754,7 @@ class WechatHalfAuto:
         
         self.logger.info(f"🔍 找到发单群内的关键信息【@微信】({template_name})，开始点击")
         left, top, right, bottom = locate_result[0]
-        
+        self.logger.info(f"点击坐标: {right}, {bottom}")
         # 右键点击
         self.get_mouse_controller().click(right, bottom, button='right')
         time.sleep(1)
@@ -762,7 +762,7 @@ class WechatHalfAuto:
         # 查找并点击多选按钮
         count = 10
         while count > 0:
-            button_centers = self.find_template_and_get_centers("multi_select.png", confidence=0.8)
+            button_centers = self.find_template_and_get_centers("multi_select.png", confidence=0.9)
             if button_centers:
                 self.logger.info("🔍 找到多选按钮，开始点击")
                 center_x, center_y = button_centers[0]
@@ -854,43 +854,46 @@ class WechatHalfAuto:
             return False
         
         # 最后检查一遍多选框是否全部选中，因为连点不一定会保证选中最后一次
-        self.logger.info("🔍 最后检查一遍多选框是否全部选中")
+        self.logger.info("等待10s后 🔍 最后检查一遍多选框是否全部选中")
+        time.sleep(10)
         button_centers = self.find_template_and_get_centers("group_button.png", confidence=0.9)
         for center_x, center_y in button_centers:
             self.get_mouse_controller().click(center_x, center_y)
 
-        time.sleep(1)
+        time.sleep(5)
+        self.logger.info("等待5s后（防止服务器卡） 🔍 开始点击【发送】按钮")
 
         # 点击【发送】按钮
         button_centers = self.find_template_and_get_centers("send_button.png", confidence=0.9)
         x_center, y_center = button_centers[0]
         self.get_mouse_controller().click(x_center, y_center)
 
-        time.sleep(3)
+        self.logger.info("等待s后 🔍 开始点击右上方三个点的菜单")
+        time.sleep(30)
 
         # 点击右上方三个点的菜单，然后鼠标往下移动一点距离，再往下滚动2次，找【清空聊天记录】
         button_centers = self.find_template_and_get_centers("three_dots_menu.png", confidence=0.9)
         x_center, y_center = button_centers[0]
         self.get_mouse_controller().click(x_center, y_center)
-        time.sleep(1)
+        time.sleep(2)
         self.get_mouse_controller().move_to(x_center, y_center + 100)
-        time.sleep(1)
+        time.sleep(2)
         self.perform_scroll_operation("custom", custom_pixels = -500)
-        time.sleep(1)
+        time.sleep(2)
         button_centers = self.find_template_and_get_centers("clear_chat_record.png", confidence=0.9)
         x_center, y_center = button_centers[0]
         self.get_mouse_controller().click(x_center, y_center)
-        time.sleep(1)
+        time.sleep(2)
         button_centers = self.find_template_and_get_centers("confirm.png", confidence=0.9)
         x_center, y_center = button_centers[0]
         self.get_mouse_controller().click(x_center, y_center)
         self.logger.info("✅ 清空聊天记录完成")
-        time.sleep(1)
+        time.sleep(2)
         button_centers = self.find_template_and_get_centers("close_three_dots_menu.png", confidence=0.9)
         x_center, y_center = button_centers[0]
         self.get_mouse_controller().click(x_center, y_center)
         self.logger.info("✅ 关闭三点菜单完成")
-        time.sleep(1)
+        time.sleep(2)
 
         return True
 
