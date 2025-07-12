@@ -262,7 +262,7 @@ class ImageLocator(Locator):
                              confidence: Optional[float] = None,
                              region: Optional[Tuple[int, int, int, int]] = None,
                              grayscale: Optional[bool] = None,
-                             max_results: int = 30) -> List[Tuple[int, int, int, int]]:
+                             max_results: int = 30) -> List[Tuple[int, int, int, int, float]]:
         """
         通过模板匹配定位所有匹配的元素
         
@@ -274,7 +274,7 @@ class ImageLocator(Locator):
             max_results: 最大返回结果数量
             
         Returns:
-            匹配区域列表 [(left, top, right, bottom), ...]
+            匹配区域列表 [(left, top, right, bottom, confidence), ...]
         """
         if not CV2_AVAILABLE:
             logger.error("OpenCV不可用，无法进行图像匹配")
@@ -343,8 +343,8 @@ class ImageLocator(Locator):
             # 限制结果数量
             filtered_matches = filtered_matches[:max_results]
             
-            # 返回坐标列表（不包含置信度）
-            result_list = [(match[0], match[1], match[2], match[3]) for match in filtered_matches]
+            # 返回坐标列表（包含置信度）
+            result_list = [(match[0], match[1], match[2], match[3], match[4]) for match in filtered_matches]
             
             logger.debug(f"图像匹配找到 {len(result_list)} 个结果: {template_path}")
             return result_list
@@ -1105,7 +1105,7 @@ class CompositeLocator:
                              confidence: Optional[float] = None,
                              region: Optional[Tuple[int, int, int, int]] = None,
                              grayscale: Optional[bool] = None,
-                             max_results: int = 10) -> List[Tuple[int, int, int, int]]:
+                             max_results: int = 10) -> List[Tuple[int, int, int, int, float]]:
         """
         通过模板匹配定位所有匹配的元素
         
@@ -1117,7 +1117,7 @@ class CompositeLocator:
             max_results: 最大返回结果数量
             
         Returns:
-            匹配区域列表 [(left, top, right, bottom), ...]
+            匹配区域列表 [(left, top, right, bottom, confidence), ...]
         """
         return self.image_locator.locate_all_by_template(
             template_path, confidence, region, grayscale, max_results

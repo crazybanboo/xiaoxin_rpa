@@ -457,14 +457,14 @@ class WechatHalfAuto:
         从矩形坐标列表计算中心点坐标
         
         Args:
-            rects: 矩形坐标列表，每个元素为(left, top, right, bottom)
+            rects: 矩形坐标列表，每个元素为(left, top, right, bottom, confidence)
             
         Returns:
             List[Tuple[int, int]]: 中心点坐标列表，每个元素为(center_x, center_y)
         """
         centers = []
         for r in rects:
-            left, top, right, bottom = r
+            left, top, right, bottom, confidence = r
             center_x = left + (right - left) // 2
             center_y = top + (bottom - top) // 2
             centers.append((center_x, center_y))
@@ -515,7 +515,7 @@ class WechatHalfAuto:
         while wait_time < max_wait_time:
             for template_name in template_names:
                 template_path = project_root / f"templates/wechat/{template_name}"
-                locate_result = self.get_locator().image_locator.locate_all_by_template(str(template_path), confidence=confidence, grayscale=False)
+                locate_result = self.get_locator().image_locator.locate_all_by_template(str(template_path), confidence=confidence)
                 if locate_result:
                     return True, locate_result, template_name
             
@@ -746,15 +746,15 @@ class WechatHalfAuto:
             "at_wechat_videominiprogram.png"
         ]
         
-        found, locate_result, template_name = self.wait_and_find_template(template_names, confidence=0.9)
+        found, locate_result, template_name = self.wait_and_find_template(template_names, confidence=0.95)
         
         if not found or not locate_result:
             self.logger.error("❌ 未找到发单群内的关键信息【@微信】")
             return False
         
         self.logger.info(f"🔍 找到发单群内的关键信息【@微信】({template_name})，开始点击")
-        left, top, right, bottom = locate_result[0]
-        self.logger.info(f"点击坐标: {right}, {bottom}")
+        left, top, right, bottom, confidence = locate_result[0]
+        self.logger.info(f"点击坐标: {right}, {bottom}, 置信度: {confidence:.3f}")
         # 右键点击
         self.get_mouse_controller().click(right, bottom, button='right')
         time.sleep(1)
