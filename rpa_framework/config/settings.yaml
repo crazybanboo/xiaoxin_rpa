@@ -20,7 +20,6 @@ mouse:
   click_delay: 0.1
   double_click_interval: 0.1
   move_duration: 0.5
-# 企业微信窗口设置
 wechat:
   window_size:
     width: 2019

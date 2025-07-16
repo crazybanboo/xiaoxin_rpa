@@ -18,7 +18,7 @@ from core.locator import CoordinateLocator, ImageLocator, WindowLocator, locator
 from core.mouse import MouseController
 from core.keyboard import KeyboardController, LanguageType
 from core.waiter import WaitController
-from workflows.wechat.wechat_half_auto import main_semi_auto, main_auto
+from workflows.wechat.wechat_simple_standalone import main_semi_auto_original
 
 class RpaFramework:
     """RPA框架主类"""
@@ -365,10 +365,10 @@ def main():
                 break
             elif choice == '1':
                 print("启动企业微信半自动化群发功能...")
-                main_semi_auto()
+                main_semi_auto_original()
             elif choice == '2':
                 print("启动企业微信全自动化群发功能...")
-                main_auto()
+                # main_auto()
             else:
                 print("无效选择，请重新输入")
     

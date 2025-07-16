@@ -583,7 +583,7 @@ class WindowLocator(Locator):
             logger.error(f"激活窗口失败: {e}")
             return False
     
-    def get_window_info(self, hwnd: int) -> Optional[WindowInfo]:
+    def get_window_info(self, hwnd: Optional[int] = None) -> Optional[WindowInfo]:
         """
         获取窗口详细信息
         
@@ -593,6 +593,8 @@ class WindowLocator(Locator):
         Returns:
             WindowInfo对象或None
         """
+        if hwnd is None:
+            return None
         if not WIN32_AVAILABLE:
             return None
         
