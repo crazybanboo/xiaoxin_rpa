@@ -6,3 +6,5 @@
 *.pyc
 *.pyd
 main.dist
+*.zip
+.claude

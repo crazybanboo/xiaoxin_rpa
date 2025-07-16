@@ -1,12 +1,20 @@
 """
 RPA Framework 配置管理模块
 提供全局配置管理和设置功能
+
+重构改进：
+1. 增加环境变量支持
+2. 运行时配置更新
+3. 配置监听和回调机制
+4. 更灵活的配置访问接口
 """
 
 import os
+import time
 import yaml
+import threading
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Callable, Union
 from dataclasses import dataclass, asdict, field
 
 
@@ -106,13 +114,22 @@ class WechatSettings:
     })
 
 class Settings:
-    """RPA框架配置管理器"""
+    """RPA框架配置管理器 - 重构版本"""
     
     def __init__(self, config_file: str = "config/settings.yaml"):
         # 获取项目根目录
         project_root = Path(__file__).parent.parent
         self.config_file = project_root / config_file
         self.config_file.parent.mkdir(exist_ok=True)
+        
+        # 配置变更回调列表
+        self._change_callbacks: List[Callable[[str, str, Any], None]] = []
+        
+        # 线程锁
+        self._lock = threading.RLock()
+        
+        # 环境变量前缀
+        self.env_prefix = "RPA_"
         
         # 初始化各个配置组
         self.general = GeneralSettings()
@@ -280,6 +297,253 @@ class Settings:
             return False
         
         return True
+    
+    def add_change_callback(self, callback: Callable[[str, str, Any], None]):
+        """
+        添加配置变更回调函数
+        
+        Args:
+            callback: 回调函数，参数为 (section, key, new_value)
+        """
+        with self._lock:
+            self._change_callbacks.append(callback)
+    
+    def remove_change_callback(self, callback: Callable[[str, str, Any], None]):
+        """移除配置变更回调函数"""
+        with self._lock:
+            if callback in self._change_callbacks:
+                self._change_callbacks.remove(callback)
+    
+    def _notify_change(self, section: str, key: str, value: Any):
+        """通知配置变更"""
+        with self._lock:
+            for callback in self._change_callbacks:
+                try:
+                    callback(section, key, value)
+                except Exception as e:
+                    print(f"配置变更回调执行失败: {e}")
+    
+    def get(self, key: str, default: Any = None) -> Any:
+        """
+        通过点分隔路径获取配置值
+        
+        Args:
+            key: 配置键，支持 'section.key' 格式
+            default: 默认值
+            
+        Returns:
+            配置值
+            
+        Example:
+            settings.get('image.confidence', 0.8)
+            settings.get('wechat.window_size.width', 1200)
+        """
+        with self._lock:
+            try:
+                parts = key.split('.')
+                if len(parts) < 2:
+                    return default
+                
+                section_name = parts[0]
+                section = getattr(self, section_name, None)
+                if section is None:
+                    return default
+                
+                # 如果是dataclass，转换为字典
+                if hasattr(section, '__dataclass_fields__'):
+                    section_dict = asdict(section)
+                else:
+                    section_dict = section
+                
+                # 遍历嵌套路径
+                current = section_dict
+                for part in parts[1:]:
+                    if isinstance(current, dict) and part in current:
+                        current = current[part]
+                    else:
+                        return default
+                
+                return current
+                
+            except Exception:
+                return default
+    
+    def set(self, key: str, value: Any, save: bool = True) -> bool:
+        """
+        通过点分隔路径设置配置值
+        
+        Args:
+            key: 配置键，支持 'section.key' 格式
+            value: 配置值
+            save: 是否立即保存到文件
+            
+        Returns:
+            是否设置成功
+            
+        Example:
+            settings.set('image.confidence', 0.9)
+            settings.set('wechat.window_size.width', 1400)
+        """
+        with self._lock:
+            try:
+                parts = key.split('.')
+                if len(parts) < 2:
+                    return False
+                
+                section_name = parts[0]
+                section = getattr(self, section_name, None)
+                if section is None:
+                    return False
+                
+                # 如果只有两级，直接设置属性
+                if len(parts) == 2:
+                    attr_name = parts[1]
+                    if hasattr(section, attr_name):
+                        setattr(section, attr_name, value)
+                        self._notify_change(section_name, attr_name, value)
+                        if save:
+                            self.save_config()
+                        return True
+                    return False
+                
+                # 处理嵌套配置
+                current = section
+                for part in parts[1:-1]:
+                    if hasattr(current, part):
+                        current = getattr(current, part)
+                    else:
+                        return False
+                
+                # 设置最终值
+                final_key = parts[-1]
+                if isinstance(current, dict):
+                    current[final_key] = value
+                elif hasattr(current, final_key):
+                    setattr(current, final_key, value)
+                else:
+                    return False
+                
+                self._notify_change(section_name, '.'.join(parts[1:]), value)
+                if save:
+                    self.save_config()
+                return True
+                
+            except Exception as e:
+                print(f"设置配置失败: {e}")
+                return False
+    
+    def load_from_env(self):
+        """从环境变量加载配置"""
+        with self._lock:
+            env_mappings = {
+                f"{self.env_prefix}IMAGE_CONFIDENCE": "image.confidence",
+                f"{self.env_prefix}MOUSE_MOVE_DURATION": "mouse.move_duration",
+                f"{self.env_prefix}DEBUG_MODE": "general.debug_mode",
+                f"{self.env_prefix}LOG_LEVEL": "logging.level",
+                f"{self.env_prefix}WECHAT_CONFIDENCE": "wechat.template_confidence",
+                f"{self.env_prefix}WINDOW_WIDTH": "wechat.window_size.width",
+                f"{self.env_prefix}WINDOW_HEIGHT": "wechat.window_size.height",
+            }
+            
+            for env_key, config_key in env_mappings.items():
+                env_value = os.environ.get(env_key)
+                if env_value is not None:
+                    # 类型转换
+                    try:
+                        if config_key.endswith(('.confidence', '.duration', '.delay', '.timeout')):
+                            value = float(env_value)
+                        elif config_key.endswith(('.width', '.height', '.count', '.size')):
+                            value = int(env_value)
+                        elif config_key.endswith('.debug_mode'):
+                            value = env_value.lower() in ('true', '1', 'yes', 'on')
+                        else:
+                            value = env_value
+                        
+                        self.set(config_key, value, save=False)
+                        print(f"从环境变量加载配置: {config_key} = {value}")
+                        
+                    except ValueError as e:
+                        print(f"环境变量类型转换失败: {env_key} = {env_value}, 错误: {e}")
+    
+    def get_section_dict(self, section_name: str) -> Dict[str, Any]:
+        """
+        获取指定配置节的字典表示
+        
+        Args:
+            section_name: 配置节名称
+            
+        Returns:
+            配置节字典
+        """
+        with self._lock:
+            section = getattr(self, section_name, None)
+            if section is None:
+                return {}
+            
+            if hasattr(section, '__dataclass_fields__'):
+                return asdict(section)
+            return section
+    
+    def update_section_from_dict(self, section_name: str, data: Dict[str, Any], save: bool = True):
+        """
+        从字典更新配置节
+        
+        Args:
+            section_name: 配置节名称
+            data: 数据字典
+            save: 是否保存
+        """
+        with self._lock:
+            section = getattr(self, section_name, None)
+            if section is None:
+                return
+            
+            for key, value in data.items():
+                if hasattr(section, key):
+                    old_value = getattr(section, key)
+                    if old_value != value:
+                        setattr(section, key, value)
+                        self._notify_change(section_name, key, value)
+            
+            if save:
+                self.save_config()
+    
+    def create_runtime_override(self, **overrides) -> 'RuntimeSettings':
+        """
+        创建运行时配置覆盖
+        
+        Args:
+            **overrides: 配置覆盖项
+            
+        Returns:
+            运行时配置对象
+        """
+        return RuntimeSettings(self, overrides)
+    
+    def export_config(self, export_path: Optional[str] = None) -> str:
+        """
+        导出配置到文件
+        
+        Args:
+            export_path: 导出路径，None表示使用默认路径
+            
+        Returns:
+            导出文件路径
+        """
+        if export_path is None:
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            export_path = f"config_backup_{timestamp}.yaml"
+        
+        export_file = Path(export_path)
+        with self._lock:
+            config_data = self.get_all_settings()
+            try:
+                with open(export_file, 'w', encoding='utf-8') as f:
+                    yaml.dump(config_data, f, default_flow_style=False, 
+                             allow_unicode=True, indent=2)
+                return str(export_file)
+            except Exception as e:
+                raise Exception(f"导出配置失败: {e}")
 
     def update_wechat_window_config(self, width: int, height: int, x: int, y: int) -> bool:
         """
@@ -386,6 +650,43 @@ class Settings:
         return True
 
 
+class RuntimeSettings:
+    """运行时配置覆盖器"""
+    
+    def __init__(self, base_settings: Settings, overrides: Dict[str, Any]):
+        self.base_settings = base_settings
+        self.overrides = overrides
+        self._active = True
+    
+    def __enter__(self):
+        """进入上下文管理器"""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """退出上下文管理器"""
+        self._active = False
+    
+    def get(self, key: str, default: Any = None) -> Any:
+        """获取配置值，优先使用覆盖值"""
+        if self._active and key in self.overrides:
+            return self.overrides[key]
+        return self.base_settings.get(key, default)
+    
+    def set_override(self, key: str, value: Any):
+        """设置覆盖值"""
+        if self._active:
+            self.overrides[key] = value
+    
+    def clear_override(self, key: str):
+        """清除覆盖值"""
+        if self._active and key in self.overrides:
+            del self.overrides[key]
+    
+    def is_active(self) -> bool:
+        """检查是否激活"""
+        return self._active
+
+
 # 全局配置实例
 settings = Settings()
 
@@ -404,6 +705,28 @@ def reload_settings():
 def save_current_settings():
     """保存当前配置"""
     settings.save_config()
+
+
+def get_config(key: str, default: Any = None) -> Any:
+    """便捷的配置获取函数"""
+    return settings.get(key, default)
+
+
+def set_config(key: str, value: Any, save: bool = True) -> bool:
+    """便捷的配置设置函数"""
+    return settings.set(key, value, save)
+
+
+def with_config_override(**overrides) -> RuntimeSettings:
+    """
+    创建临时配置覆盖上下文
+    
+    Usage:
+        with with_config_override(image_confidence=0.9):
+            # 在这个代码块中，图像置信度会被临时设置为0.9
+            find_and_click("button.png")
+    """
+    return settings.create_runtime_override(**overrides)
 
 
 if __name__ == "__main__":
