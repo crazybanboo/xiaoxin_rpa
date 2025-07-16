@@ -13,26 +13,25 @@ import time
 import traceback
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List, Tuple
-from pathlib import Path
 
 from .mouse_helpers import (
     find_and_click, find_all_and_click, batch_click, 
-    special_click_sequence, crazy_click, smart_scroll,
-    wait_and_find_template, find_template_centers,
-    TemplateNotFound, MouseOperationError
+    crazy_click, smart_scroll,
+    wait_and_find_template,
+    TemplateNotFound
 )
 from .vision_debug import debug_template_match, batch_confidence_test
 from .locator import CompositeLocator
 from .mouse import MouseController
 from .keyboard import KeyboardController
-from .utils import logger, RpaException
+from .utils import logger
 from ..config.settings import get_settings, get_config, with_config_override
 
 
 class WorkflowBase(ABC):
     """工作流基础类"""
     
-    def __init__(self, name: str = None, debug_mode: bool = False):
+    def __init__(self, name: Optional[str] = None, debug_mode: bool = False):
         """
         初始化工作流
         
@@ -235,7 +234,7 @@ class WorkflowBase(ABC):
             result = wait_and_find_template(template_paths, confidence, timeout)
             
             if result:
-                found_template, region = result
+                found_template, _ = result
                 self._log_operation(f"✅ 找到模板: {found_template}")
                 return found_template
             else:
@@ -403,7 +402,7 @@ class WorkflowBase(ABC):
 class SimpleWorkflow(WorkflowBase):
     """简单工作流基类"""
     
-    def __init__(self, name: str = None, debug_mode: bool = False):
+    def __init__(self, name: Optional[str] = None, debug_mode: bool = False):
         super().__init__(name, debug_mode)
     
     def run(self) -> bool:

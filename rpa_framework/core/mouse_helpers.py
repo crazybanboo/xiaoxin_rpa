@@ -39,7 +39,7 @@ def _get_locator():
 
 
 def find_and_click(template_path: str, 
-                   confidence: float = 0.8,
+                   confidence: Optional[float] = None,
                    region: Optional[Tuple[int, int, int, int]] = None,
                    click_offset: Tuple[int, int] = (0, 0),
                    timeout: float = 5.0) -> bool:
@@ -94,7 +94,7 @@ def find_and_click(template_path: str,
 
 
 def find_all_and_click(template_path: str,
-                       confidence: float = 0.8,
+                       confidence: Optional[float] = None,
                        region: Optional[Tuple[int, int, int, int]] = None,
                        click_delay: float = 0.5,
                        max_clicks: int = 10) -> int:
@@ -289,7 +289,7 @@ def smart_scroll(direction: str,
 
 
 def wait_and_find_template(template_paths: List[str],
-                          confidence: float = 0.8,
+                          confidence: Optional[float] = None,
                           timeout: float = 10.0,
                           check_interval: float = 0.5) -> Optional[Tuple[str, Tuple[int, int, int, int]]]:
     """

@@ -9,18 +9,14 @@
 4. 清晰的业务流程方法
 """
 
-import time
-from typing import List, Optional, Tuple, Dict, Any
-from pathlib import Path
+from typing import List, Optional
 
 from ...core.workflow_base import WorkflowBase
 from ...core.mouse_helpers import (
-    find_and_click, find_all_and_click, batch_click,
-    crazy_click, wait_and_find_template, find_template_centers,
+    crazy_click, find_template_centers,
     TemplateNotFound
 )
 from ...core.wechat_detector import WechatProcessDetector
-from ...core.utils import logger, RpaException
 from ...config.settings import get_config, get_settings
 from .exceptions import WechatNotFoundError, WechatWindowError, WechatOperationError
 
@@ -267,10 +263,10 @@ class WechatWorkflow(WorkflowBase):
         try:
             # 获取配置
             crazy_config = self.wechat_config.crazy_click_settings
-            groups = groups or crazy_config["total_groups"]
-            clicks_per_group = clicks_per_group or crazy_config["clicks_per_group"]
+            final_groups = groups or crazy_config["total_groups"]
+            final_clicks_per_group = clicks_per_group or crazy_config["clicks_per_group"]
             
-            self._log_operation(f"开始疯狂点击: {template_name}, {groups}组x{clicks_per_group}次")
+            self._log_operation(f"开始疯狂点击: {template_name}, {final_groups}组x{final_clicks_per_group}次")
             
             # 查找目标位置
             centers = find_template_centers(template_name, 
@@ -283,7 +279,7 @@ class WechatWorkflow(WorkflowBase):
             target_x, target_y = centers[0]
             
             # 执行疯狂点击
-            crazy_click(target_x, target_y, groups, clicks_per_group,
+            crazy_click(target_x, target_y, final_groups, final_clicks_per_group,
                        group_delay=crazy_config["group_interval"],
                        click_delay=crazy_config["click_interval"])
             
@@ -395,7 +391,7 @@ class WechatWorkflow(WorkflowBase):
             self.error_count += 1
             raise WechatOperationError(f"群发工作流执行失败: {e}")
     
-    def execute_semi_auto_workflow(self, pause_points: List[str] = None) -> bool:
+    def execute_semi_auto_workflow(self, pause_points: Optional[List[str]] = None) -> bool:
         """
         执行半自动工作流（在关键点暂停等待用户确认）
         

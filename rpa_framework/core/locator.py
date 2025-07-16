@@ -258,7 +258,7 @@ class ImageLocator(Locator):
             logger.error(f"图像定位失败: {e}")
             return None
     
-    def locate_all_by_template(self, template_path: str, 
+    def locate_all_by_template(self, template_path: Optional[str] = None, 
                              confidence: Optional[float] = None,
                              region: Optional[Tuple[int, int, int, int]] = None,
                              grayscale: Optional[bool] = None,
@@ -422,7 +422,7 @@ class ImageLocator(Locator):
         overlap_area = (overlap_right - overlap_left) * (overlap_bottom - overlap_top)
         return overlap_area
 
-    def _load_template(self, template_path: str, grayscale: bool = True):
+    def _load_template(self, template_path: Optional[str] = None, grayscale: bool = True):
         """
         加载模板图片
         
@@ -442,7 +442,9 @@ class ImageLocator(Locator):
         # 检查缓存
         if cache_key in self.template_cache:
             return self.template_cache[cache_key]
-        
+        if template_path is None:
+            return None
+
         try:
             # 检查文件是否存在
             if not Path(template_path).exists():
@@ -1101,7 +1103,7 @@ class CompositeLocator:
         
         return None
 
-    def locate_all_by_template(self, template_path: str, 
+    def locate_all_by_template(self, template_path: Optional[str] = None, 
                              confidence: Optional[float] = None,
                              region: Optional[Tuple[int, int, int, int]] = None,
                              grayscale: Optional[bool] = None,

@@ -40,7 +40,7 @@ class VisionDebugger:
         self.is_running = False
         
     def debug_template_match(self, template_path: str, 
-                           confidence: float = 0.8,
+                           confidence: Optional[float] = None,
                            region: Optional[Tuple[int, int, int, int]] = None,
                            grayscale: bool = True) -> None:
         """
@@ -59,7 +59,7 @@ class VisionDebugger:
         self.current_template = template_path
         self._launch_debug_window(template_path, confidence, region, grayscale)
     
-    def _launch_debug_window(self, template_path: str, confidence: float, 
+    def _launch_debug_window(self, template_path: str, confidence: Optional[float], 
                            region: Optional[Tuple[int, int, int, int]], grayscale: bool):
         """启动调试窗口"""
         
@@ -254,7 +254,7 @@ class VisionDebugger:
                                 image=photo, anchor='center')
         
         # 保存引用防止垃圾回收
-        self.canvas.image = photo
+        self.canvas_image = photo
     
     def _select_template(self):
         """选择模板文件"""
@@ -358,7 +358,7 @@ class VisionDebugger:
         def update_thread():
             while self.is_running:
                 try:
-                    if self.live_update_var.get():
+                    if self.live_update_var.get() and self.debug_window:
                         self.debug_window.after(0, self._update_debug_display)
                     time.sleep(0.5)  # 每0.5秒检查一次
                 except:
@@ -375,7 +375,7 @@ class VisionDebugger:
 
 
 # 便捷函数
-def debug_template_match(template_path: str, confidence: float = 0.8) -> None:
+def debug_template_match(template_path: str, confidence: Optional[float] = None) -> None:
     """
     调试模板匹配（便捷函数）
     
