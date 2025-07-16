@@ -1,7 +1,7 @@
 """
 企业微信半自动化模块
 """
-from .wechat_operations import WechatOperationInterface, OperationResult
+# 移除过度封装的WechatOperationInterface和OperationResult
 from .exceptions import (
     WechatNotFoundError,
     WechatWindowError,
@@ -13,8 +13,6 @@ from .exceptions import (
 from .wechat_half_auto import WechatHalfAuto
 
 __all__ = [
-    'WechatOperationInterface',
-    'OperationResult',
     'WechatNotFoundError',
     'WechatWindowError',
     'WechatOperationError',

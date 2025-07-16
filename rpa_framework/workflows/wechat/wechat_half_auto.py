@@ -62,7 +62,7 @@ from core.keyboard import KeyboardController
 from core.wechat_detector import WechatProcessDetector, ProcessInfo
 from core.utils import logger, config, RpaException
 from config.settings import get_settings
-from workflows.wechat.wechat_operations import WechatOperationInterface, OperationResult
+# 移除过度封装的WechatOperationInterface
 from workflows.wechat.exceptions import WechatNotFoundError, WechatWindowError, WechatOperationError
 
 
@@ -86,9 +86,7 @@ class WechatHalfAuto:
         self.locator = CompositeLocator()
         self.mouse = MouseController()
         self.keyboard = KeyboardController()
-        self.operation_interface = WechatOperationInterface(
-            self.locator, self.mouse, self.keyboard, self.config
-        )
+        # 移除WechatOperationInterface，直接使用底层API
         
         # 状态变量
         self.current_process: Optional[ProcessInfo] = None
@@ -229,121 +227,100 @@ class WechatHalfAuto:
         """获取键盘控制器"""
         return self.keyboard
     
-    def get_operation_interface(self) -> WechatOperationInterface:
-        """获取操作接口"""
-        return self.operation_interface
+    # 移除过度封装的操作接口，直接使用底层API
     
-    def find_and_click_button(self, template_path: str, confidence: Optional[float] = None) -> OperationResult:
+    def find_and_click_button(self, template_path: str, confidence: Optional[float] = None) -> bool:
         """
-        查找并点击按钮
+        查找并点击按钮 - 简化版本，移除过度封装
         
         Args:
             template_path: 模板路径
             confidence: 置信度
             
         Returns:
-            OperationResult: 操作结果
+            bool: 操作是否成功
         """
         if not self.is_initialized:
-            return OperationResult(
-                success=False,
-                message="系统未初始化",
-                error_code="NOT_INITIALIZED"
-            )
+            self.logger.error("系统未初始化")
+            return False
         
         try:
-            # 查找按钮
-            find_result = self.operation_interface.find_button_by_template(template_path, confidence)
-            if not find_result.success:
-                return find_result
+            # 设置默认置信度
+            confidence = confidence or self.config.get('template_confidence', 0.8)
             
-            # 点击按钮
-            if find_result.data and "position" in find_result.data:
-                position = find_result.data["position"]
-                click_result = self.operation_interface.click_at_position(position[0], position[1])
-                return click_result
+            # 直接调用底层API查找模板
+            result = self.locator.image_locator.locate_by_template(template_path, confidence=confidence)
+            
+            if result:
+                # 计算中心点
+                left, top, right, bottom = result
+                x, y = left + (right - left) // 2, top + (bottom - top) // 2
+                
+                # 直接点击
+                self.mouse.click(x, y)
+                
+                # 操作延迟
+                operation_delay = self.config.get('operation_delay', 0.5)
+                if operation_delay > 0:
+                    time.sleep(operation_delay)
+                
+                self.logger.info(f"成功点击按钮: {template_path} 位置: ({x}, {y})")
+                return True
             else:
-                return OperationResult(
-                    success=False,
-                    message="无法获取按钮位置",
-                    error_code="NO_BUTTON_POSITION"
-                )
+                self.logger.warning(f"未找到按钮模板: {template_path}")
+                return False
                 
         except Exception as e:
             self.logger.error(f"查找并点击按钮失败: {str(e)}")
-            return OperationResult(
-                success=False,
-                message=f"操作失败: {str(e)}",
-                error_code="BUTTON_CLICK_ERROR"
-            )
+            return False
     
-    def send_message_to_current_chat(self, message: str) -> OperationResult:
+    def send_message_to_current_chat(self, message: str) -> bool:
         """
-        向当前聊天发送消息
+        向当前聊天发送消息 - 简化版本
         
         Args:
             message: 要发送的消息
             
         Returns:
-            OperationResult: 操作结果
+            bool: 操作是否成功
         """
         if not self.is_initialized:
-            return OperationResult(
-                success=False,
-                message="系统未初始化",
-                error_code="NOT_INITIALIZED"
-            )
+            self.logger.error("系统未初始化")
+            return False
         
         try:
-            # 输入消息
-            type_result = self.operation_interface.type_message(message)
-            if not type_result.success:
-                return type_result
+            # 直接使用键盘输入消息
+            self.keyboard.type_text(message)
             
-            # 发送消息
-            send_result = self.operation_interface.send_message()
-            return send_result
+            # 按Enter发送
+            self.keyboard.key_down('enter')
+            
+            # 发送延迟
+            message_send_delay = self.config.get('message_send_delay', 1.0)
+            if message_send_delay > 0:
+                time.sleep(message_send_delay)
+            
+            self.logger.info(f"成功发送消息: {message}")
+            return True
             
         except Exception as e:
             self.logger.error(f"发送消息失败: {str(e)}")
-            return OperationResult(
-                success=False,
-                message=f"发送消息失败: {str(e)}",
-                error_code="SEND_MESSAGE_ERROR"
-            )
-    
-    def take_screenshot(self, filename: Optional[str] = None) -> OperationResult:
+            return False
+       
+    def adjust_wechat_window(self) -> bool:
         """
-        截取操作截图
-        
-        Args:
-            filename: 截图文件名
-            
-        Returns:
-            OperationResult: 操作结果
-        """
-        return self.operation_interface.take_operation_screenshot(filename)
-    
-    def adjust_wechat_window(self) -> OperationResult:
-        """
-        调整企业微信窗口大小和位置
+        调整企业微信窗口大小和位置 - 简化版本
         
         Returns:
-            OperationResult: 操作结果
+            bool: 操作是否成功
         """
         if not self.is_initialized:
-            return OperationResult(
-                success=False,
-                message="系统未初始化",
-                error_code="NOT_INITIALIZED"
-            )
+            self.logger.error("系统未初始化")
+            return False
         
         if not self.current_window_info:
-            return OperationResult(
-                success=False,
-                message="无法获取窗口信息",
-                error_code="NO_WINDOW_INFO"
-            )
+            self.logger.error("无法获取窗口信息")
+            return False
         
         try:
             # 从配置中获取窗口设置
@@ -382,30 +359,15 @@ class WechatHalfAuto:
                         'is_visible': new_window_info.is_visible
                     }
                 
-                return OperationResult(
-                    success=True,
-                    message=f"窗口调整成功: {target_width}x{target_height} at ({target_x}, {target_y})",
-                    data={
-                        'width': target_width,
-                        'height': target_height,
-                        'x': target_x,
-                        'y': target_y
-                    }
-                )
+                self.logger.info(f"窗口调整成功: {target_width}x{target_height} at ({target_x}, {target_y})")
+                return True
             else:
-                return OperationResult(
-                    success=False,
-                    message="窗口调整失败",
-                    error_code="WINDOW_ADJUST_FAILED"
-                )
+                self.logger.error("窗口调整失败")
+                return False
                 
         except Exception as e:
             self.logger.error(f"调整窗口失败: {str(e)}")
-            return OperationResult(
-                success=False,
-                message=f"调整窗口失败: {str(e)}",
-                error_code="WINDOW_ADJUST_ERROR"
-            )
+            return False
     
     def cleanup(self):
         """清理资源"""
@@ -708,15 +670,15 @@ class WechatHalfAuto:
         self.logger.info("🔧 正在调整企业微信窗口大小和位置...")
         adjust_result = self.adjust_wechat_window()
         
-        if adjust_result.success:
-            self.logger.info(f"✅ {adjust_result.message}")
+        if adjust_result:
+            self.logger.info(f"✅ 窗口调整成功")
             # 获取调整后的窗口信息
             updated_window_info = self.get_wechat_window_info()
             if updated_window_info:
                 self.logger.info(f"📏 调整后窗口大小: {updated_window_info['width']}x{updated_window_info['height']}")
                 self.logger.info(f"📏 调整后窗口位置: {updated_window_info['rect']}")
         else:
-            self.logger.error(f"❌ 窗口调整失败: {adjust_result.message}")
+            self.logger.error(f"❌ 窗口调整失败")
             # 继续执行，不中断流程
         
         return True
