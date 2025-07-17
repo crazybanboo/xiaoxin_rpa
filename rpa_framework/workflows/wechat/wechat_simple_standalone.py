@@ -16,9 +16,8 @@ sys.path.insert(0, str(project_root))
 # 导入必要的核心模块
 from core.locator import CompositeLocator
 from core.mouse import MouseController
-from core.keyboard import KeyboardController
 from core.wechat_detector import WechatProcessDetector, ProcessInfo
-from core.utils import logger, config, RpaException
+from core.utils import logger, config
 from config.settings import get_settings
 from workflows.wechat.exceptions_minimal import WechatNotFoundError, WechatWindowError, WechatOperationError
 
@@ -42,7 +41,6 @@ class WechatSemiAutoStandalone:
         self.process_detector = WechatProcessDetector()
         self.locator = CompositeLocator()
         self.mouse = MouseController()
-        self.keyboard = KeyboardController()
         
         # 状态变量
         self.current_process: Optional[ProcessInfo] = None

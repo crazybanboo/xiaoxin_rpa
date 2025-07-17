@@ -50,6 +50,8 @@ class TemplateManager:
         """
         if template_dir is None:
             template_dir = get_config('general.template_dir', 'templates')
+        if template_dir is None:
+            raise RpaException("模板目录未配置")
         
         self.template_dir = Path(template_dir)
         if not self.template_dir.is_absolute():
